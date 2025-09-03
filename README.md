@@ -137,12 +137,6 @@ This license ensures that:
 - **Open-source community** for tools and libraries
 - **Contributors** who participate in project improvement
 
-## 📞 Contact
-
-- **GitHub Issues** : For bugs and suggestions
-- **Discussions** : For general questions
-- **Email** : [your-email@example.com]
-
 ---
 
 **Together, let's make public finance transparency accessible to everyone! 🏛️✨**
