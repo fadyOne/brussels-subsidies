@@ -137,7 +137,6 @@ This license ensures that:
 - **Open-source community** for tools and libraries
 - **Contributors** who participate in project improvement
 
-
 ---
 
-**Together, let's make public finance transparency accessible to everyone!**
+**Together, let's make public finance transparency accessible to everyone! 🏛️✨**
