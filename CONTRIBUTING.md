@@ -1,200 +1,200 @@
-# 🤝 Guide de Contribution
+# 🤝 Contributing Guide
 
-Merci de votre intérêt pour contribuer à **Subsides Bruxelles** ! Ce guide vous aidera à participer efficacement au projet.
+Thank you for your interest in contributing to **Brussels Subsidies**! This guide will help you participate effectively in the project.
 
-## 🎯 Objectif du projet
+## 🎯 Project Objective
 
-Notre mission est de **rendre transparente la distribution des subsides publics** dans la Région de Bruxelles-Capitale pour **restaurer la confiance des citoyens** dans l'utilisation de l'argent public.
+Our mission is to **make transparent the distribution of public subsidies** in the Brussels-Capital Region to **restore citizens' trust** in the use of public money.
 
-## 🚀 Comment commencer
+## 🚀 Getting Started
 
-### 1. Fork et Clone
+### 1. Fork and Clone
 ```bash
-git clone https://github.com/[votre-username]/brussels-sub.git
+git clone https://github.com/[your-username]/brussels-sub.git
 cd brussels-sub
 npm install
 ```
 
-### 2. Lancer le projet
+### 2. Run the Project
 ```bash
 npm run dev
 ```
 
-### 3. Créer une branche
+### 3. Create a Branch
 ```bash
-git checkout -b feature/votre-fonctionnalite
+git checkout -b feature/your-feature
 ```
 
-## 🎨 Types de contributions
+## 🎨 Types of Contributions
 
-### 🐛 Corrections de bugs
-- Corriger des erreurs existantes
-- Améliorer la gestion d'erreurs
-- Optimiser les performances
+### 🐛 Bug Fixes
+- Fix existing errors
+- Improve error handling
+- Optimize performance
 
-### ✨ Nouvelles fonctionnalités
-- Améliorer l'interface utilisateur
-- Ajouter de nouvelles visualisations
-- Créer de nouveaux filtres
-- Améliorer la recherche
+### ✨ New Features
+- Improve user interface
+- Add new visualizations
+- Create new filters
+- Enhance search functionality
 
-### 📊 Amélioration des données
-- Affiner la catégorisation des subsides
-- Ajouter de nouvelles métriques
-- Améliorer l'analyse des données
+### 📊 Data Improvements
+- Refine subsidy categorization
+- Add new metrics
+- Improve data analysis
 
 ### 🎨 Design & UX
-- Améliorer l'interface
-- Optimiser l'expérience mobile
-- Créer de nouveaux composants
+- Improve interface
+- Optimize mobile experience
+- Create new components
 
 ### 📝 Documentation
-- Améliorer le README
-- Créer des guides utilisateur
-- Documenter le code
+- Improve README
+- Create user guides
+- Document code
 
-## 🛠️ Structure du projet
+## 🛠️ Project Structure
 
 ```
 src/
-├── app/                 # Pages Next.js
-│   ├── page.tsx        # Page principale
-│   └── layout.tsx      # Layout global
-├── components/         # Composants réutilisables
-│   └── ui/            # Composants UI (Shadcn)
-└── lib/               # Utilitaires et configuration
+├── app/                 # Next.js pages
+│   ├── page.tsx        # Main page
+│   └── layout.tsx      # Global layout
+├── components/         # Reusable components
+│   └── ui/            # UI components (Shadcn)
+└── lib/               # Utilities and configuration
 public/
-├── data-*.json        # Données des subsides
-└── README-DATA.md     # Documentation des données
+├── data-*.json        # Subsidy data
+└── README-DATA.md     # Data documentation
 ```
 
-## 📋 Standards de code
+## 📋 Code Standards
 
 ### TypeScript
-- Utiliser TypeScript pour tout le code
-- Typer toutes les fonctions et variables
-- Éviter `any` autant que possible
+- Use TypeScript for all code
+- Type all functions and variables
+- Avoid `any` as much as possible
 
 ### Style
-- Utiliser Prettier pour le formatage
-- Suivre les conventions ESLint
-- Commenter le code complexe
+- Use Prettier for formatting
+- Follow ESLint conventions
+- Comment complex code
 
-### Composants
-- Utiliser des composants fonctionnels
-- Préférer les hooks React
-- Garder les composants petits et focalisés
+### Components
+- Use functional components
+- Prefer React hooks
+- Keep components small and focused
 
-## 🧪 Tests
+## 🧪 Testing
 
 ```bash
-# Lancer les tests
+# Run tests
 npm test
 
-# Tests avec couverture
+# Tests with coverage
 npm run test:coverage
 ```
 
-## 📝 Processus de contribution
+## 📝 Contribution Process
 
 ### 1. Issue
-- Vérifiez s'il existe déjà une issue
-- Créez une issue si nécessaire
-- Assignez-vous l'issue
+- Check if an issue already exists
+- Create an issue if necessary
+- Assign yourself to the issue
 
-### 2. Développement
-- Créez une branche depuis `main`
-- Développez votre fonctionnalité
-- Testez vos changements
-- Documentez si nécessaire
+### 2. Development
+- Create a branch from `main`
+- Develop your feature
+- Test your changes
+- Document if necessary
 
 ### 3. Pull Request
-- Créez une PR claire et détaillée
-- Liez l'issue correspondante
-- Ajoutez des captures d'écran si pertinent
-- Attendez la review
+- Create a clear and detailed PR
+- Link the corresponding issue
+- Add screenshots if relevant
+- Wait for review
 
 ### 4. Review
-- Répondez aux commentaires
-- Faites les modifications demandées
-- Testez après chaque changement
+- Respond to comments
+- Make requested changes
+- Test after each change
 
-## 🎯 Priorités actuelles
+## 🎯 Current Priorities
 
 ### 🔥 Urgent
-- [ ] Améliorer la catégorisation des bénéficiaires
-- [ ] Optimiser les performances de recherche
-- [ ] Corriger les bugs d'affichage mobile
+- [ ] Improve beneficiary categorization
+- [ ] Optimize search performance
+- [ ] Fix mobile display bugs
 
 ### 📈 Important
-- [ ] Ajouter des tests unitaires
-- [ ] Améliorer l'accessibilité
-- [ ] Créer de nouvelles visualisations
+- [ ] Add unit tests
+- [ ] Improve accessibility
+- [ ] Create new visualizations
 
-### 💡 Idées
-- [ ] Export PDF des données
-- [ ] Notifications de nouveaux subsides
-- [ ] API publique
-- [ ] Application mobile
+### 💡 Ideas
+- [ ] PDF data export
+- [ ] New subsidy notifications
+- [ ] Public API
+- [ ] Mobile application
 
-## 🐛 Signaler un bug
+## 🐛 Reporting a Bug
 
-Utilisez le template d'issue pour les bugs :
+Use the issue template for bugs:
 
 ```markdown
-**Description du bug**
-Une description claire du problème.
+**Bug Description**
+A clear description of the problem.
 
-**Étapes pour reproduire**
-1. Aller à '...'
-2. Cliquer sur '...'
-3. Voir l'erreur
+**Steps to Reproduce**
+1. Go to '...'
+2. Click on '...'
+3. See error
 
-**Comportement attendu**
-Ce qui devrait se passer.
+**Expected Behavior**
+What should happen.
 
-**Captures d'écran**
-Si applicable.
+**Screenshots**
+If applicable.
 
-**Environnement**
+**Environment**
 - OS: [ex: Windows, macOS, Linux]
-- Navigateur: [ex: Chrome, Firefox, Safari]
+- Browser: [ex: Chrome, Firefox, Safari]
 - Version: [ex: 1.0.0]
 ```
 
-## 💡 Proposer une fonctionnalité
+## 💡 Proposing a Feature
 
 ```markdown
-**Description de la fonctionnalité**
-Une description claire de ce que vous voulez.
+**Feature Description**
+A clear description of what you want.
 
-**Problème résolu**
-Quel problème cela résout-il ?
+**Problem Solved**
+What problem does this solve?
 
-**Solution proposée**
-Comment vous imaginez la solution ?
+**Proposed Solution**
+How do you imagine the solution?
 
-**Alternatives considérées**
-D'autres solutions possibles ?
+**Alternatives Considered**
+Other possible solutions?
 ```
 
 ## 📞 Communication
 
-- **Issues GitHub** : Pour les bugs et suggestions
-- **Discussions** : Pour les questions générales
-- **Pull Requests** : Pour les contributions de code
+- **GitHub Issues** : For bugs and suggestions
+- **Discussions** : For general questions
+- **Pull Requests** : For code contributions
 
-## 🙏 Code de conduite
+## 🙏 Code of Conduct
 
-- Soyez respectueux et bienveillant
-- Acceptez les critiques constructives
-- Aidez les autres contributeurs
-- Respectez les opinions différentes
+- Be respectful and kind
+- Accept constructive criticism
+- Help other contributors
+- Respect different opinions
 
-## 🎉 Reconnaissance
+## 🎉 Recognition
 
-Tous les contributeurs seront mentionnés dans le README et les releases. Merci de participer à ce projet d'intérêt public !
+All contributors will be mentioned in the README and releases. Thank you for participating in this public interest project!
 
 ---
 
-**Ensemble, rendons la transparence accessible à tous ! 🏛️✨**
+**Together, let's make transparency accessible to everyone! 🏛️✨**
