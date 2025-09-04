@@ -1,5 +1,5 @@
 // Configuration optimisée pour JSON (format natif OpenDataSoft)
-const API_KEY = "69d6badd9f3aa058986ebd5abf6dea19779903ac373f1e4943c147e8"
+const API_KEY = "xxxxxxxxxxxxxxxxxxxxxxxxxxxx" //the old key was revoked
 const BASE_URL = "https://opendata.brussels.be/api/explore/v2.1"
 
 // Types optimisés pour la visualisation
