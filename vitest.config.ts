@@ -24,5 +24,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Désactiver PostCSS pour les tests
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
 })
 
