@@ -8,6 +8,10 @@ node_modules/
 !.yarn/releases
 !.yarn/versions
 
+# Lock files (on utilise pnpm, donc on ignore package-lock.json)
+package-lock.json
+yarn.lock
+
 # Testing
 /coverage
 
