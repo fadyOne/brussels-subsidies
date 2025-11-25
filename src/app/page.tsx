@@ -21,21 +21,9 @@ import { AlertCircle, Building, Calendar, FileText, Filter, RefreshCw, Search, S
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
-interface Subside {
-  nom_de_la_subvention_naam_van_de_subsidie: string
-  article_complet_volledig_artikel: string
-  beneficiaire_begunstigde: string
-  le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie: string | null
-  l_objet_de_la_subvention_doel_van_de_subsidie: string
-  montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023: number
-  montant_octroye_toegekend_bedrag: number
-  l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend: string
-  l_annee_de_fin_d_octroi_de_la_subvention_eindjaar_waarin_de_subsidie_wordt_toegekend: string
-  // Champs pour compatibilité avec 2021
-  nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie?: string
-  article_budgetaire_begrotingsartikel?: string
-  montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021?: string
-}
+import type { Subside } from '@/lib/types'
+import { normalizeSubsidesArray } from '@/lib/data-normalizer'
+import { getCachedData, setCachedData } from '@/lib/cache'
 
 const COLORS = [
   "#3B82F6", // Bleu vif
@@ -293,6 +281,16 @@ export default function SubsidesDashboard() {
       setLoading(true)
       setError(null)
 
+      // ✅ Vérifier le cache en premier (amélioration 2)
+      const cachedData = getCachedData(dataYear)
+      if (cachedData) {
+        console.log('✅ Données récupérées depuis le cache')
+        setSubsides(cachedData)
+        setFilteredSubsides(cachedData)
+        setLoading(false)
+        return
+      }
+
       let allData: Subside[] = []
 
       if (dataYear === "all") {
@@ -319,87 +317,8 @@ export default function SubsidesDashboard() {
             const rawData: unknown[] = await jsonData.json()
             
             if (rawData && rawData.length > 0) {
-              const normalizedData: Subside[] = rawData.map((item: unknown) => {
-                const data = item as Record<string, unknown>
-                
-                // Gérer les différents noms de champs selon l'année
-                const beneficiaire = String(
-                  data.beneficiaire_begunstigde || 
-                  data.nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie || 
-                  "Non spécifié"
-                )
-                
-                const article = String(
-                  data.article_complet_volledig_artikel || 
-                  data.article_budgetaire_begrotingsartikel || 
-                  "Non spécifié"
-                )
-                
-                const objet = String(
-                  data.l_objet_de_la_subvention_doel_van_de_subsidie || 
-                  data.objet_du_subside_doel_van_de_subsidie || 
-                  "Non spécifié"
-                )
-                
-                const nomSubside = String(
-                  data.nom_de_la_subvention_naam_van_de_subsidie || 
-                  data.nom_du_subside_naam_subsidie || 
-                  "Non spécifié"
-                )
-                
-                const parseAmount = (value: unknown): number => {
-                  if (typeof value === 'number') return value
-                  if (typeof value === 'string') {
-                    return parseFloat(value.replace(/\./g, '').replace(',', '.')) || 0
-                  }
-                  return 0
-                }
-                
-                // Gérer les différents champs de montant selon l'année
-                const montant = parseAmount(
-                  data.montant_octroye_toegekend_bedrag || 
-                  data.budget_2019_begroting_2019
-                )
-                
-                const montantPrevu = parseAmount(
-                  data.montant_prevu_au_budget_2020_bedrag_voorzien_op_begroting_2020 ||
-                  data.montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021 ||
-                  data.montant_prevu_au_budget_2022_bedrag_voorzien_op_begroting_2022 ||
-                  data.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023 ||
-                  data.montant_prevu_au_budget_2024_bedrag_voorzien_op_begroting_2024 ||
-                  data.budget_2019_begroting_2019
-                )
-
-                // Gérer les différents champs d'année
-                const anneeDebut = String(
-                  data.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend ||
-                  data.annee_budgetaire_debut_octroi_begroting_jaar_begin_toekenning ||
-                  year
-                )
-                
-                const anneeFin = String(
-                  data.l_annee_de_fin_d_octroi_de_la_subvention_eindjaar_waarin_de_subsidie_wordt_toegekend ||
-                  data.annee_budgetaire_fin_octroi_begroting_jaar_einde_van_toekenning ||
-                  (parseInt(year) + 1).toString()
-                )
-
-                return {
-                  nom_de_la_subvention_naam_van_de_subsidie: nomSubside,
-                  article_complet_volledig_artikel: article,
-                  beneficiaire_begunstigde: beneficiaire,
-                  le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie: data.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie ? String(data.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie) : (data.numero_bce_kbo_nummer ? String(data.numero_bce_kbo_nummer) : null),
-                  l_objet_de_la_subvention_doel_van_de_subsidie: objet,
-                  montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023: montantPrevu,
-                  montant_octroye_toegekend_bedrag: montant,
-                  l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend: anneeDebut,
-                  l_annee_de_fin_d_octroi_de_la_subvention_eindjaar_waarin_de_subsidie_wordt_toegekend: anneeFin,
-                  // Champs pour compatibilité
-                  nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie: beneficiaire,
-                  article_budgetaire_begrotingsartikel: article,
-                  montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021: String(montantPrevu),
-                }
-              })
-              
+              // ✅ Utilisation du normalizer centralisé pour éviter la duplication
+              const normalizedData = normalizeSubsidesArray(rawData, year)
               return normalizedData
             }
             return null
@@ -431,87 +350,8 @@ export default function SubsidesDashboard() {
         const rawData: unknown[] = await jsonData.json()
 
         if (rawData && rawData.length > 0) {
-          const normalizedData: Subside[] = rawData.map((item: unknown) => {
-            const data = item as Record<string, unknown>
-            
-            // Gérer les différents noms de champs selon l'année
-            const beneficiaire = String(
-              data.beneficiaire_begunstigde || 
-              data.nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie || 
-              "Non spécifié"
-            )
-            
-            const article = String(
-              data.article_complet_volledig_artikel || 
-              data.article_budgetaire_begrotingsartikel || 
-              "Non spécifié"
-            )
-            
-            const objet = String(
-              data.l_objet_de_la_subvention_doel_van_de_subsidie || 
-              data.objet_du_subside_doel_van_de_subsidie || 
-              "Non spécifié"
-            )
-            
-            const nomSubside = String(
-              data.nom_de_la_subvention_naam_van_de_subsidie || 
-              data.nom_du_subside_naam_subsidie || 
-              "Non spécifié"
-            )
-            
-            const parseAmount = (value: unknown): number => {
-              if (typeof value === 'number') return value
-              if (typeof value === 'string') {
-                return parseFloat(value.replace(/\./g, '').replace(',', '.')) || 0
-              }
-              return 0
-            }
-            
-            // Gérer les différents champs de montant selon l'année
-            const montant = parseAmount(
-              data.montant_octroye_toegekend_bedrag || 
-              data.budget_2019_begroting_2019
-            )
-            
-            const montantPrevu = parseAmount(
-              data.montant_prevu_au_budget_2020_bedrag_voorzien_op_begroting_2020 ||
-              data.montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021 ||
-              data.montant_prevu_au_budget_2022_bedrag_voorzien_op_begroting_2022 ||
-              data.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023 ||
-              data.montant_prevu_au_budget_2024_bedrag_voorzien_op_begroting_2024 ||
-              data.budget_2019_begroting_2019
-            )
-
-            // Gérer les différents champs d'année
-            const anneeDebut = String(
-              data.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend ||
-              data.annee_budgetaire_debut_octroi_begroting_jaar_begin_toekenning ||
-              dataYear
-            )
-            
-            const anneeFin = String(
-              data.l_annee_de_fin_d_octroi_de_la_subvention_eindjaar_waarin_de_subsidie_wordt_toegekend ||
-              data.annee_budgetaire_fin_octroi_begroting_jaar_einde_van_toekenning ||
-              (parseInt(dataYear) + 1).toString()
-            )
-
-            return {
-              nom_de_la_subvention_naam_van_de_subsidie: nomSubside,
-              article_complet_volledig_artikel: article,
-              beneficiaire_begunstigde: beneficiaire,
-              le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie: data.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie ? String(data.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie) : (data.numero_bce_kbo_nummer ? String(data.numero_bce_kbo_nummer) : null),
-              l_objet_de_la_subvention_doel_van_de_subsidie: objet,
-              montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023: montantPrevu,
-              montant_octroye_toegekend_bedrag: montant,
-              l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend: anneeDebut,
-              l_annee_de_fin_d_octroi_de_la_subvention_eindjaar_waarin_de_subsidie_wordt_toegekend: anneeFin,
-              // Champs pour compatibilité
-              nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie: beneficiaire,
-              article_budgetaire_begrotingsartikel: article,
-              montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021: String(montantPrevu),
-            }
-          })
-
+          // ✅ Utilisation du normalizer centralisé pour éviter la duplication
+          const normalizedData = normalizeSubsidesArray(rawData, dataYear)
           allData = normalizedData
           console.log(`${normalizedData.length} subsides ${dataYear} chargés avec succès`)
       } else {
@@ -521,6 +361,10 @@ export default function SubsidesDashboard() {
 
       setSubsides(allData)
       setFilteredSubsides(allData)
+      
+      // ✅ Mettre en cache les données chargées (amélioration 2)
+      // Fallback gracieux : si le cache échoue, l'application continue de fonctionner
+      setCachedData(allData, dataYear)
       
     } catch (apiError) {
       console.error("❌ Erreur chargement JSON:", apiError)
@@ -533,7 +377,7 @@ export default function SubsidesDashboard() {
 
   useEffect(() => {
     loadData(selectedDataYear)
-  }, [selectedDataYear]) // ✅ Retirer loadData de la dépendance
+  }, [loadData, selectedDataYear]) // ✅ Retirer loadData de la dépendance
 
   // Filtrage des données avec debounce pour optimiser la recherche
   useEffect(() => {
@@ -980,7 +824,7 @@ export default function SubsidesDashboard() {
               </div>
 
               <div>
-                <label className="text-sm font-semibold text-gray-700 mb-3 block flex items-center gap-2">
+                <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Building className="w-4 h-4 text-indigo-300" />
                   Catégorie
                 </label>
@@ -1322,7 +1166,6 @@ export default function SubsidesDashboard() {
                   {/* Pagination intelligente - affiche seulement quelques numéros */}
                   {(() => {
                     const pages = []
-                    const maxVisiblePages = 5
                     
                     // Toujours afficher la première page
                     if (totalPages > 0) {
@@ -1423,7 +1266,7 @@ export default function SubsidesDashboard() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, percent, value }) => {
+                          label={({ name, percent }) => {
                             // Afficher seulement les labels pour les tranches > 3%
                             if (percent && percent > 0.03) {
                               return `${name}\n${(percent * 100).toFixed(0)}%`
@@ -1454,7 +1297,7 @@ export default function SubsidesDashboard() {
                         <Legend 
                           verticalAlign="bottom" 
                           height={36}
-                          formatter={(value, entry) => (
+                          formatter={(value) => (
                             <span style={{ color: '#374151', fontSize: '12px' }}>
                               {value}
                             </span>
@@ -1725,7 +1568,7 @@ export default function SubsidesDashboard() {
               <div className="space-y-3">
               
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {topBeneficiariesData.map((beneficiary, index) => (
+                {topBeneficiariesData.map((beneficiary) => (
                   <div 
                     key={beneficiary.name} 
                     className="flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md border border-transparent hover:border-blue-200"
