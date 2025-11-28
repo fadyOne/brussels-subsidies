@@ -12,11 +12,13 @@ export interface APIConfig {
 
 export const BRUSSELS_OPEN_DATA_CONFIG: APIConfig = {
   baseUrl: "https://opendata.bruxelles.be/api/explore/v2.1",
-  // apiKey: process.env.BRUSSELS_OPEN_DATA_API_KEY, // Si nécessaire
+  apiKey: process.env.NEXT_PUBLIC_OPENDATA_API_KEY,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
-    // 'Authorization': `Bearer ${process.env.BRUSSELS_OPEN_DATA_API_KEY}`, // Si nécessaire
+    ...(process.env.NEXT_PUBLIC_OPENDATA_API_KEY && {
+      'Authorization': `Apikey ${process.env.NEXT_PUBLIC_OPENDATA_API_KEY}`,
+    }),
   },
   rateLimit: {
     requestsPerMinute: 60, // À ajuster selon la documentation
@@ -56,7 +58,7 @@ export async function checkAPIRequirements(): Promise<{
       corsEnabled: response.ok,
       availableDatasets: response.ok ? ["test-successful"] : [],
     }
-  } catch (error) {
+  } catch {
     return {
       requiresAuth: false,
       requiresApiKey: false,

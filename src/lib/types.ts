@@ -19,5 +19,10 @@ export interface Subside {
   nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie?: string
   article_budgetaire_begrotingsartikel?: string
   montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021?: string
+  // URLs sources des données (séparées pour meilleure lisibilité)
+  source_url?: string // Conservé pour compatibilité
+  source_url_open_data?: string
+  source_url_north_data?: string
+  source_url_kbo?: string
 }
 

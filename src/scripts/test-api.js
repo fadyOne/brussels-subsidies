@@ -88,7 +88,7 @@ async function testBrusselsOpenDataAPI() {
           }
           break // Arrêter à la première trouvaille
         }
-      } catch (error) {
+      } catch {
         // Continuer avec le suivant
       }
     }

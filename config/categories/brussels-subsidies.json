@@ -1,0 +1,263 @@
+{
+  "source": "brussels-subsidies",
+  "defaultCategory": "Autre",
+  "categories": [
+    {
+      "name": "Sport",
+      "rules": [
+        {
+          "keywords": [
+            "sport",
+            "football",
+            "basketball",
+            "natation",
+            "judo",
+            "tennis",
+            "padel",
+            "course",
+            "athlétisme",
+            "cyclisme",
+            "rugby",
+            "volley",
+            "boxing",
+            "karate",
+            "taekwondo",
+            "hockey",
+            "pétanque",
+            "diving",
+            "synchro",
+            "futsal",
+            "gym"
+          ],
+          "exclude": ["transport", "support", "rapport"],
+          "priority": 10
+        }
+      ]
+    },
+    {
+      "name": "Culture",
+      "rules": [
+        {
+          "keywords": [
+            "festival",
+            "musique",
+            "jazz",
+            "théâtre",
+            "culture",
+            "art",
+            "exposition",
+            "concert",
+            "danse",
+            "littérature",
+            "cinéma",
+            "spectacle",
+            "film",
+            "cinémathèque",
+            "bibliothèque",
+            "musée",
+            "ommegang",
+            "briff",
+            "bsff",
+            "lumières",
+            "woodblocks",
+            "midis",
+            "minimes",
+            "musicorum"
+          ],
+          "exclude": [
+            "concertation",
+            "overlegcomité",
+            "partie",
+            "participation",
+            "partenaire",
+            "particulier",
+            "particulièrement",
+            "particulière",
+            "quartier"
+          ],
+          "priority": 9
+        }
+      ]
+    },
+    {
+      "name": "Social",
+      "rules": [
+        {
+          "keywords": [
+            "social",
+            "égalité",
+            "chances",
+            "handicap",
+            "seniors",
+            "jeunesse",
+            "famille",
+            "solidarité",
+            "insertion",
+            "prévention",
+            "aide",
+            "accompagnement",
+            "pride",
+            "lgbt",
+            "rainbow",
+            "droits",
+            "femmes",
+            "braderies",
+            "sécurité",
+            "oeuvres",
+            "sociaux"
+          ],
+          "priority": 8
+        }
+      ]
+    },
+    {
+      "name": "Environnement",
+      "rules": [
+        {
+          "keywords": [
+            "environnement",
+            "climat",
+            "biodiversité",
+            "vert",
+            "nature",
+            "écologie",
+            "développement durable",
+            "énergie",
+            "recyclage",
+            "earth",
+            "hour",
+            "alimentation",
+            "durable",
+            "insectes",
+            "hôtels",
+            "vaisselle",
+            "réemployable",
+            "herbruikbaar"
+          ],
+          "priority": 7
+        }
+      ]
+    },
+    {
+      "name": "Éducation",
+      "rules": [
+        {
+          "keywords": [
+            "école",
+            "éducation",
+            "formation",
+            "apprentissage",
+            "enseignement",
+            "pédagogie",
+            "étudiant",
+            "université",
+            "recherche",
+            "scientifique",
+            "devoirs",
+            "vormingen",
+            "vsd",
+            "opleiding",
+            "vélo",
+            "fietsevenementen",
+            "pairs",
+            "sexuelle"
+          ],
+          "priority": 6
+        }
+      ]
+    },
+    {
+      "name": "Santé",
+      "rules": [
+        {
+          "keywords": [
+            "santé",
+            "hôpital",
+            "médical",
+            "soins",
+            "bien-être",
+            "médecine",
+            "pharmacie",
+            "psychologie",
+            "mental",
+            "repos",
+            "verzorging",
+            "schuldenlast"
+          ],
+          "priority": 5
+        }
+      ]
+    },
+    {
+      "name": "Économie",
+      "rules": [
+        {
+          "keywords": [
+            "économie",
+            "emploi",
+            "entreprise",
+            "développement économique",
+            "innovation",
+            "startup",
+            "commerce",
+            "tourisme",
+            "made",
+            "versailles",
+            "congrès",
+            "mini-entreprises",
+            "promotion",
+            "toerisme"
+          ],
+          "priority": 4
+        }
+      ]
+    },
+    {
+      "name": "Quartier & Urbanisme",
+      "rules": [
+        {
+          "keywords": [
+            "quartier",
+            "contrat",
+            "urbanisme",
+            "logement",
+            "infrastructure",
+            "mobilité",
+            "rénovation",
+            "urbaine",
+            "balades",
+            "urbaines",
+            "littéraires",
+            "plaisirs",
+            "hiver",
+            "winterpret"
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "name": "Fonctionnement",
+      "rules": [
+        {
+          "keywords": [
+            "fonctionnement",
+            "werkingskosten",
+            "cotisation",
+            "bijdrage",
+            "membre",
+            "association",
+            "primes",
+            "syndicales",
+            "vakbondspremies",
+            "annuelle",
+            "jaarlijkse",
+            "lidmaatschapsbijdrage"
+          ],
+          "priority": 2
+        }
+      ]
+    }
+  ]
+}
+
