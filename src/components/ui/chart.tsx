@@ -12,7 +12,7 @@ interface ChartContainerProps extends React.HTMLAttributes<HTMLDivElement> {
   config: ChartConfig
 }
 
-function ChartContainer({ className, config, ...props }: ChartContainerProps) {
+function ChartContainer({ className, ...props }: ChartContainerProps) {
   return (
     <div
       className={cn("w-full", className)}

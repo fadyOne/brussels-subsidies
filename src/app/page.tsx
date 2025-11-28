@@ -1,10 +1,9 @@
 "use client"
-// import { LanguageSelector } from "@/components/LanguageSelector" // ❌ Supprimé temporairement
 import { LoadingScreen } from "@/components/LoadingScreen"
+import { MiniEvolutionChart } from "@/components/MiniEvolutionChart"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer } from "@/components/ui/chart"
 import {
   Dialog,
   DialogContent,
@@ -15,144 +14,40 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-// import { useTranslation } from "@/lib/LanguageContext" // ❌ Supprimé temporairement
-import { AlertCircle, Building, Calendar, FileText, Filter, RefreshCw, Search, Share2 } from "lucide-react"
+import { AlertCircle, Building, Download, FileText, Heart, PieChart as PieChartIcon, RefreshCw, Search, Share2 } from "lucide-react"
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import type { Subside } from '@/lib/types'
 import { normalizeSubsidesArray } from '@/lib/data-normalizer'
+import { exportData, type ExportColumn, DEFAULT_COLUMNS, COLUMN_LABELS } from '@/lib/data-exporter'
 import { getCachedData, setCachedData } from '@/lib/cache'
-
-const COLORS = [
-  "#3B82F6", // Bleu vif
-  "#10B981", // Vert émeraude
-  "#F59E0B", // Orange ambré
-  "#EF4444", // Rouge vif
-  "#FBBF24", // Jaune
-  "#06B6D4", // Cyan
-  "#84CC16", // Vert lime
-  "#F97316", // Orange
-  "#EC4899", // Rose
-  "#6366F1"  // Indigo
-]
-
-// Fonction pour catégoriser les subsides
-function categorizeSubside(objet: string): string {
-  const obj = objet.toLowerCase()
-  
-  // Sport
-  if (obj.includes('sport') || obj.includes('football') || obj.includes('basketball') || 
-      obj.includes('natation') || obj.includes('judo') || obj.includes('tennis') || 
-      obj.includes('padel') || obj.includes('course') || obj.includes('athlétisme') ||
-      obj.includes('cyclisme') || obj.includes('rugby') || obj.includes('volley') ||
-      obj.includes('boxing') || obj.includes('karate') || obj.includes('taekwondo') ||
-      obj.includes('hockey') || obj.includes('pétanque') || obj.includes('diving') ||
-      obj.includes('synchro') || obj.includes('futsal') || obj.includes('gym')) {
-    return 'Sport'
-  }
-  
-  // Culture
-  if (obj.includes('festival') || obj.includes('musique') || obj.includes('jazz') || 
-      obj.includes('théâtre') || obj.includes('culture') || obj.includes('art') || 
-      obj.includes('exposition') || obj.includes('concert') || obj.includes('danse') ||
-      obj.includes('littérature') || obj.includes('cinéma') || obj.includes('spectacle') ||
-      obj.includes('film') || obj.includes('cinémathèque') || obj.includes('bibliothèque') ||
-      obj.includes('musée') || obj.includes('ommegang') || obj.includes('briff') ||
-      obj.includes('bsff') || obj.includes('lumières') || obj.includes('woodblocks') ||
-      obj.includes('midis') || obj.includes('minimes') || obj.includes('musicorum')) {
-    return 'Culture'
-  }
-  
-  // Social
-  if (obj.includes('social') || obj.includes('égalité') || obj.includes('chances') || 
-      obj.includes('handicap') || obj.includes('seniors') || obj.includes('jeunesse') || 
-      obj.includes('famille') || obj.includes('solidarité') || obj.includes('insertion') ||
-      obj.includes('prévention') || obj.includes('aide') || obj.includes('accompagnement') ||
-      obj.includes('pride') || obj.includes('lgbt') || obj.includes('rainbow') ||
-      obj.includes('droits') || obj.includes('femmes') || obj.includes('braderies') ||
-      obj.includes('sécurité') || obj.includes('oeuvres') || obj.includes('sociaux')) {
-    return 'Social'
-  }
-  
-  // Environnement
-  if (obj.includes('environnement') || obj.includes('climat') || obj.includes('biodiversité') || 
-      obj.includes('vert') || obj.includes('nature') || obj.includes('écologie') ||
-      obj.includes('développement durable') || obj.includes('énergie') || obj.includes('recyclage') ||
-      obj.includes('earth') || obj.includes('hour') || obj.includes('alimentation') ||
-      obj.includes('durable') || obj.includes('insectes') || obj.includes('hôtels') ||
-      obj.includes('vaisselle') || obj.includes('réemployable') || obj.includes('herbruikbaar')) {
-    return 'Environnement'
-  }
-  
-  // Éducation
-  if (obj.includes('école') || obj.includes('éducation') || obj.includes('formation') || 
-      obj.includes('apprentissage') || obj.includes('enseignement') || obj.includes('pédagogie') ||
-      obj.includes('étudiant') || obj.includes('université') || obj.includes('recherche') ||
-      obj.includes('scientifique') || obj.includes('devoirs') || obj.includes('vormingen') ||
-      obj.includes('vsd') || obj.includes('opleiding') || obj.includes('vélo') ||
-      obj.includes('fietsevenementen') || obj.includes('pairs') || obj.includes('sexuelle')) {
-    return 'Éducation'
-  }
-  
-  // Santé
-  if (obj.includes('santé') || obj.includes('hôpital') || obj.includes('médical') || 
-      obj.includes('soins') || obj.includes('bien-être') || obj.includes('médecine') ||
-      obj.includes('pharmacie') || obj.includes('psychologie') || obj.includes('mental') ||
-      obj.includes('repos') || obj.includes('verzorging') || obj.includes('schuldenlast')) {
-    return 'Santé'
-  }
-  
-  // Économie
-  if (obj.includes('économie') || obj.includes('emploi') || obj.includes('entreprise') || 
-      obj.includes('développement économique') || obj.includes('innovation') || obj.includes('startup') ||
-      obj.includes('commerce') || obj.includes('tourisme') || obj.includes('made') ||
-      obj.includes('versailles') || obj.includes('congrès') || obj.includes('mini-entreprises') ||
-      obj.includes('promotion') || obj.includes('toerisme')) {
-    return 'Économie'
-  }
-  
-  // Quartier/Urbanisme
-  if (obj.includes('quartier') || obj.includes('contrat') || obj.includes('urbanisme') || 
-      obj.includes('logement') || obj.includes('infrastructure') || obj.includes('mobilité') ||
-      obj.includes('durable') || obj.includes('rénovation') || obj.includes('urbaine') ||
-      obj.includes('balades') || obj.includes('urbaines') || obj.includes('littéraires') ||
-      obj.includes('plaisirs') || obj.includes('hiver') || obj.includes('winterpret')) {
-    return 'Quartier & Urbanisme'
-  }
-  
-  // Fonctionnement général
-  if (obj.includes('fonctionnement') || obj.includes('werkingskosten') || obj.includes('cotisation') ||
-      obj.includes('bijdrage') || obj.includes('membre') || obj.includes('association') ||
-      obj.includes('primes') || obj.includes('syndicales') || obj.includes('vakbondspremies') ||
-      obj.includes('annuelle') || obj.includes('jaarlijkse') || obj.includes('lidmaatschapsbijdrage')) {
-    return 'Fonctionnement'
-  }
-  
-  return 'Autre'
-}
+import { categorizeSubside } from '@/lib/category-config'
+import { loadFilterPreset, generateHash, normalizeForHash, createFilterPreset } from '@/lib/filter-presets'
 
 export default function SubsidesDashboard() {
-  // const { t } = useTranslation() // ❌ Supprimé temporairement
   const [subsides, setSubsides] = useState<Subside[]>([])
   const [filteredSubsides, setFilteredSubsides] = useState<Subside[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedDataYear, setSelectedDataYear] = useState<string>("all")
-  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  // Filtre de catégorie retiré - toujours "toutes les catégories" pour éviter les faux filtres
   const [selectedCommune, setSelectedCommune] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 20
+  const itemsPerPage = 40 // Augmenté pour afficher plus de résultats avec le design compact
   const [showCopyNotification, setShowCopyNotification] = useState(false)
-  // const [showShareDialog, setShowShareDialog] = useState(false) // ❌ Supprimé - non utilisé
+  const [isExporting, setIsExporting] = useState(false)
+  const [selectedColumns, setSelectedColumns] = useState<ExportColumn[]>(DEFAULT_COLUMNS)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [presetLoaded, setPresetLoaded] = useState(false) // Prevent multiple loads
 
   // Fonction pour détecter automatiquement les années disponibles
   const getAvailableYears = useCallback(async (): Promise<string[]> => {
     try {
       // Liste des années possibles (étendue pour couvrir plus de cas)
-      const possibleYears = ["2030", "2029", "2028", "2027", "2026", "2025", "2024", "2023", "2022", "2021", "2020", "2019", "2018", "2017", "2016", "2015"]
+      // Limiter aux années qui existent réellement pour éviter les 404
+      const possibleYears = ["2024", "2023", "2022", "2021", "2020", "2019"]
       const years: string[] = ["all"]
       
       // Vérifier chaque année possible
@@ -198,13 +93,78 @@ export default function SubsidesDashboard() {
       // Charger les paramètres URL en premier
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search)
-        const year = urlParams.get('year')
-        const category = urlParams.get('category')
-        const search = urlParams.get('search')
         
-        if (year) setSelectedDataYear(year)
-        if (category) setSelectedCategory(category)
-        if (search) setSearchTerm(search)
+        // Check for filter preset first (priority over direct params)
+        const filterId = urlParams.get('filter')
+        if (filterId && !presetLoaded) {
+          // Load preset and apply filters
+          const presetFilters = loadFilterPreset(filterId)
+          
+          if (presetFilters) {
+            // Check if this is a hash-based preset (fallback mode)
+            if ('_isHash' in presetFilters && presetFilters._isHash === 'true' && '_hash' in presetFilters) {
+              // Hash-based preset: need to find matching beneficiary by hash
+              const targetHash = presetFilters._hash as string
+              
+              console.log(`[Page] Hash-based preset detected, searching for hash: ${targetHash}`)
+              
+              // We'll need to search through subsides to find matching hash
+              // For now, we'll set a flag and search after data loads
+              // Store the hash in a ref or state to use after data loads
+              // Note: This requires data to be loaded first, so we'll handle it in the filtering logic
+              
+              // For immediate feedback, we can try to find a match in already loaded data
+              // But since data loads async, we'll need to handle this in the filtering useEffect
+              // Set a special search term that indicates hash search
+              setSearchTerm(`__HASH_SEARCH__:${targetHash}`)
+              
+              if (presetFilters.year) {
+                setSelectedDataYear(presetFilters.year)
+              }
+              
+              setPresetLoaded(true)
+              
+              // Clean URL
+              const newUrl = new URL(window.location.href)
+              newUrl.searchParams.delete('filter')
+              window.history.replaceState({}, '', newUrl.toString())
+              
+              console.log(`[Page] Hash-based preset loaded, will search for matching beneficiary`)
+            } else {
+              // Normal preset: apply filters directly
+              if (presetFilters.search) {
+                setSearchTerm(presetFilters.search)
+              }
+              if (presetFilters.year) {
+                setSelectedDataYear(presetFilters.year)
+              }
+              
+              // Mark as loaded to prevent reloading
+              setPresetLoaded(true)
+              
+              // Clean URL (remove filter param) to prevent reload on refresh
+              const newUrl = new URL(window.location.href)
+              newUrl.searchParams.delete('filter')
+              window.history.replaceState({}, '', newUrl.toString())
+              
+              console.log(`[Page] Loaded filter preset ${filterId}`)
+            }
+          } else {
+            // Preset not found or expired - clean up URL
+            const newUrl = new URL(window.location.href)
+            newUrl.searchParams.delete('filter')
+            window.history.replaceState({}, '', newUrl.toString())
+            
+            console.warn(`[Page] Filter preset ${filterId} not found or expired`)
+          }
+        } else {
+          // No preset, load direct URL params (backward compatibility)
+          const year = urlParams.get('year')
+          const search = urlParams.get('search')
+          
+          if (year) setSelectedDataYear(year)
+          if (search) setSearchTerm(search)
+        }
       }
       
       const detectedYears = await getAvailableYears()
@@ -212,55 +172,72 @@ export default function SubsidesDashboard() {
       console.log("📅 Années détectées:", detectedYears)
     }
     detectYears()
-  }, [getAvailableYears])
+  }, [getAvailableYears, presetLoaded])
 
-  // Fonction pour gérer le clic sur un bénéficiaire (simplifiée)
-  const handleBeneficiaryClick = useCallback((beneficiaryName: string) => {
-    // Pour l'instant, juste un console.log - peut être étendu plus tard
-    console.log('Bénéficiaire cliqué:', beneficiaryName)
+
+
+  // Fonction pour exporter les données
+  const handleExport = useCallback((format: 'csv' | 'excel' | 'json' | 'pdf') => {
+    if (filteredSubsides.length === 0) {
+      alert('Aucune donnée à exporter')
+      return
+    }
+
+    if (selectedColumns.length === 0) {
+      alert('Veuillez sélectionner au moins une colonne à exporter')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      exportData(format, {
+        data: filteredSubsides,
+        filename: 'subside',
+        filters: {
+          year: selectedDataYear,
+          // Filtre de catégorie retiré - toujours "toutes les catégories"
+          category: undefined as string | undefined,
+          searchTerm: searchTerm || undefined,
+        },
+        includeMetadata: true,
+        // Toujours passer selectedColumns (même si toutes les colonnes sont sélectionnées)
+        // Les fonctions d'export utiliseront DEFAULT_COLUMNS si undefined, mais on évite les problèmes
+        selectedColumns: selectedColumns.length > 0 ? selectedColumns : DEFAULT_COLUMNS,
+      })
+      setShowExportDialog(false)
+    } catch (error) {
+      console.error('Erreur lors de l\'export:', error)
+      alert(`Erreur lors de l'export ${format.toUpperCase()}. Veuillez réessayer.`)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [filteredSubsides, selectedDataYear, searchTerm, selectedColumns])
+
+  // Fonction pour gérer la sélection de colonnes
+  const handleColumnToggle = useCallback((column: ExportColumn) => {
+    setSelectedColumns((prev) => {
+      if (prev.includes(column)) {
+        // Désélectionner (mais garder au moins une colonne)
+        const newSelection = prev.filter((c) => c !== column)
+        return newSelection.length > 0 ? newSelection : prev
+      } else {
+        // Sélectionner
+        return [...prev, column]
+      }
+    })
   }, [])
 
-  // Fonction pour gérer le clic sur un secteur dans la légende
-  const handleSectorClick = useCallback((sectorName: string) => {
-    // Extraire les mots clés les plus courts pour une meilleure recherche
-    let searchTerm = sectorName.toLowerCase()
-    
-    // Mapping des catégories vers des termes de recherche plus courts
-    const searchMapping: { [key: string]: string } = {
-      'brussels major events (bme)': 'bme',
-      'bravvo bruxelles avance': 'bravvo',
-      'services de police': 'police',
-      'action sociale': 'action sociale',
-      'santé & hôpitaux': 'hôpital',
-      'enseignement & formation': 'enseignement',
-      'culture & patrimoine': 'culture',
-      'sport & loisirs': 'sport',
-      'économie & commerce': 'économie',
-      'autorités & institutions': 'autorités',
-      'événements & festivals': 'festival',
-      'services sociaux & cpas': 'cpas',
-      'alimentation & restauration': 'cuisines'
-    }
-    
-    // Utiliser le mapping si disponible, sinon prendre le premier mot significatif
-    if (searchMapping[searchTerm]) {
-      searchTerm = searchMapping[searchTerm]
+  // Fonction pour sélectionner/désélectionner toutes les colonnes
+  const handleSelectAllColumns = useCallback(() => {
+    if (selectedColumns.length === DEFAULT_COLUMNS.length) {
+      // Désélectionner toutes sauf la première
+      setSelectedColumns([DEFAULT_COLUMNS[0]])
     } else {
-      // Extraire le premier mot significatif (ignorer les articles)
-      const words = searchTerm.split(' ')
-      const significantWords = words.filter(word => 
-        word.length > 2 && 
-        !['les', 'des', 'du', 'de', 'la', 'le', 'et', '&'].includes(word)
-      )
-      searchTerm = significantWords[0] || words[0]
+      // Sélectionner toutes
+      setSelectedColumns([...DEFAULT_COLUMNS])
     }
-    
-    console.log(`🔍 Clic sur secteur: "${sectorName}" → recherche: "${searchTerm}"`)
-    setSearchTerm(searchTerm)
-    
-    // Remonter en haut de la page
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
+  }, [selectedColumns])
+
 
   // Fonction pour générer les liens externes (supprimée - non utilisée)
   // const getExternalLinks = (beneficiaryName: string, bceNumber: string | null) => {
@@ -384,22 +361,65 @@ export default function SubsidesDashboard() {
     const timeoutId = setTimeout(() => {
     let filtered = subsides
 
-    if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (s) =>
-            s.beneficiaire_begunstigde.toLowerCase().includes(searchLower) ||
-            s.l_objet_de_la_subvention_doel_van_de_subsidie.toLowerCase().includes(searchLower) ||
-            s.article_complet_volledig_artikel.toLowerCase().includes(searchLower) ||
-            s.nom_de_la_subvention_naam_van_de_subsidie.toLowerCase().includes(searchLower)
-        )
+    // Check if search term is a hash search marker (fallback mode)
+    if (searchTerm.startsWith('__HASH_SEARCH__:')) {
+      const targetHash = searchTerm.substring('__HASH_SEARCH__:'.length)
+      
+      console.log(`[Page] Hash search mode, looking for hash: ${targetHash}`)
+      
+      // Search through subsides to find beneficiary with matching hash
+      filtered = subsides.filter((subside) => {
+        const normalized = normalizeForHash(subside.beneficiaire_begunstigde)
+        const hash = generateHash(normalized)
+        return hash === targetHash
+      })
+      
+      if (filtered.length > 0) {
+        console.log(`[Page] Found ${filtered.length} matches for hash ${targetHash}`)
+      } else {
+        console.warn(`[Page] No matches found for hash ${targetHash}`)
+      }
+    } else if (searchTerm) {
+        // Normal search
+        const searchLower = searchTerm.toLowerCase().trim()
+        
+        // Si le terme de recherche contient plusieurs mots, chercher si TOUS les mots sont présents
+        // Sinon, chercher si le terme est contenu dans les champs
+        const searchWords = searchLower.split(/\s+/).filter(w => w.length > 0)
+        
+        filtered = filtered.filter((s) => {
+          const beneficiaire = s.beneficiaire_begunstigde.toLowerCase()
+          const objet = s.l_objet_de_la_subvention_doel_van_de_subsidie.toLowerCase()
+          const article = s.article_complet_volledig_artikel.toLowerCase()
+          const nom = s.nom_de_la_subvention_naam_van_de_subsidie.toLowerCase()
+          
+          // Si plusieurs mots, vérifier que tous sont présents dans le même champ (plus précis)
+          // ou au moins dans le champ bénéficiaire (priorité pour les recherches de bénéficiaires)
+          if (searchWords.length > 1) {
+            // D'abord vérifier si tous les mots sont dans le bénéficiaire (recherche exacte)
+            const allInBeneficiaire = searchWords.every(word => beneficiaire.includes(word))
+            if (allInBeneficiaire) {
+              return true
+            }
+            
+            // Sinon, vérifier si tous les mots sont présents dans au moins un champ
+            return searchWords.every(word => 
+              beneficiaire.includes(word) ||
+              objet.includes(word) ||
+              article.includes(word) ||
+              nom.includes(word)
+            )
+          } else {
+            // Recherche simple avec un seul mot - priorité au bénéficiaire
+            return beneficiaire.includes(searchLower) ||
+                   objet.includes(searchLower) ||
+                   article.includes(searchLower) ||
+                   nom.includes(searchLower)
+          }
+        })
       }
 
-    if (selectedCategory !== "all") {
-      filtered = filtered.filter(
-        (s) => categorizeSubside(s.l_objet_de_la_subvention_doel_van_de_subsidie) === selectedCategory,
-      )
-    }
+    // Filtre de catégorie retiré - toujours "toutes les catégories"
 
     if (selectedCommune !== "all") {
       filtered = filtered.filter(
@@ -412,209 +432,13 @@ export default function SubsidesDashboard() {
     }, 300) // Debounce de 300ms pour éviter trop de recalculs
 
     return () => clearTimeout(timeoutId)
-  }, [subsides, searchTerm, selectedCategory, selectedCommune])
+  }, [subsides, searchTerm, selectedCommune])
 
   // Pagination
   const totalPages = Math.ceil(filteredSubsides.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedSubsides = filteredSubsides.slice(startIndex, startIndex + itemsPerPage)
 
-  // Données pour les graphiques
-  const categoryData = filteredSubsides.reduce(
-    (acc, subside) => {
-      const category = categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
-      const existing = acc.find((item) => item.name === category)
-      if (existing) {
-        existing.value += subside.montant_octroye_toegekend_bedrag
-        existing.count += 1
-      } else {
-        acc.push({
-          name: category,
-          value: subside.montant_octroye_toegekend_bedrag,
-          count: 1,
-        })
-      }
-      return acc
-    },
-    [] as { name: string; value: number; count: number }[],
-  )
-
-      // Fonction pour catégoriser les bénéficiaires
-  const categorizeBeneficiary = (name: string): string | null => {
-    const lowerName = name.toLowerCase()
-    
-    // Catégories spécifiques en priorité (ordre de spécificité décroissante)
-    
-    // 1. BME - très spécifique
-    if (lowerName.includes('brussels major events') || lowerName.includes('bme')) {
-      return 'Brussels Major Events (BME)'
-    }
-    
-    // 2. Bravvo - très spécifique
-    if (lowerName.includes('bravvo') || lowerName.includes('bruxelles avance') || lowerName.includes('brussel vooruit')) {
-      return 'Bravvo Bruxelles Avance'
-    }
-    
-    // 3. Organisations spécifiques
-    if (lowerName.includes('schola') || lowerName.includes('bruxelles enseignement')) {
-      return 'Enseignement & Formation'
-    }
-    if (lowerName.includes('centre public') || lowerName.includes('cpas')) {
-      return 'Services Sociaux & CPAS'
-    }
-    if (lowerName.includes('bruxelles musées') || lowerName.includes('musées') || lowerName.includes('musea') ||
-        lowerName.includes('centre culturel') || lowerName.includes('bruegel')) {
-      return 'Culture & Patrimoine'
-    }
-    if (lowerName.includes('brufête') || lowerName.includes('brufeest') || lowerName.includes('visit.brussels')) {
-      return 'Événements & Festivals'
-    }
-    if (lowerName.includes('conférence des bourgmestres') || lowerName.includes('vergadering der burgemeesters')) {
-      return 'Autorités & Institutions'
-    }
-    if (lowerName.includes('cuisines') || lowerName.includes('keukens')) {
-      return 'Alimentation & Restauration'
-    }
-    
-    // 4. Catégories générales (ordre de priorité)
-    if (lowerName.includes('police') || lowerName.includes('politie')) {
-      return 'Services de Police'
-    }
-    if (lowerName.includes('action sociale') || lowerName.includes('maatschappelijk welzijn') || lowerName.includes('picol')) {
-      return 'Action Sociale'
-    }
-    if (lowerName.includes('hôpital') || lowerName.includes('hospitalier') || lowerName.includes('ziekenhuis')) {
-      return 'Santé & Hôpitaux'
-    }
-    if (lowerName.includes('enseignement') || lowerName.includes('école') || lowerName.includes('school') || lowerName.includes('formation')) {
-      return 'Enseignement & Formation'
-    }
-    if (lowerName.includes('culture') || lowerName.includes('événement') || lowerName.includes('event') || lowerName.includes('création')) {
-      return 'Culture & Patrimoine'
-    }
-    if (lowerName.includes('sport') || lowerName.includes('bains') || lowerName.includes('zwem')) {
-      return 'Sport & Loisirs'
-    }
-    if (lowerName.includes('économie') || lowerName.includes('commerce') || lowerName.includes('entreprise') || lowerName.includes('ondernemen')) {
-      return 'Économie & Commerce'
-    }
-    if (lowerName.includes('office national') || lowerName.includes('rijksdienst') || lowerName.includes('autorités') || lowerName.includes('overheden')) {
-      return 'Autorités & Institutions'
-    }
-    if (lowerName.includes('maison de') || lowerName.includes('centre d\'animation') || lowerName.includes('espace cultures')) {
-      return 'Centres Culturels & Maisons'
-    }
-    if (lowerName.includes('rock the city') || lowerName.includes('jazz projects') || lowerName.includes('productions associées')) {
-      return 'Événements & Festivals'
-    }
-    if (lowerName.includes('intégration') || lowerName.includes('cohabitation')) {
-      return 'Services Sociaux & CPAS'
-    }
-    if (lowerName.includes('expositions') || lowerName.includes('tentoonstellingen')) {
-      return 'Musées & Expositions'
-    }
-    if (lowerName.includes('restaurant') || lowerName.includes('alimentation') || lowerName.includes('food')) {
-      return 'Alimentation & Restauration'
-    }
-    
-    // Ne pas inclure dans le camembert si pas de catégorie claire
-    return null
-  }
-
-  // Données pour le camembert des catégories de bénéficiaires (basé sur toutes les données, pas filtrées)
-  const topBeneficiariesData = subsides.reduce(
-      (acc, subside) => {
-      const category = categorizeBeneficiary(subside.beneficiaire_begunstigde)
-      
-      // Ignorer les catégories null (anciennement "Autres")
-      if (!category) {
-        return acc
-      }
-      
-      // Debug temporaire pour vérifier les catégorisations
-      if (subside.beneficiaire_begunstigde && subside.beneficiaire_begunstigde.toLowerCase().includes('bravvo')) {
-        console.log(`🔍 Bravvo détecté: "${subside.beneficiaire_begunstigde}" → "${category}"`)
-      }
-      
-      const existing = acc.find((item) => item.name === category)
-        if (existing) {
-          existing.value += subside.montant_octroye_toegekend_bedrag
-        existing.count += 1
-        } else {
-        acc.push({
-          name: category,
-          value: subside.montant_octroye_toegekend_bedrag,
-          count: 1,
-        })
-        }
-        return acc
-      },
-    [] as { name: string; value: number; count: number }[],
-  )
-    .sort((a, b) => b.value - a.value) // Trier par montant décroissant
-    .map((item, index) => ({
-      ...item,
-      color: [
-        '#FBBF24', // Jaune
-        '#06B6D4', // Cyan
-        '#10B981', // Émeraude
-        '#F59E0B', // Ambre
-        '#EF4444', // Rouge
-        '#3B82F6', // Bleu
-        '#EC4899', // Rose
-        '#84CC16', // Lime
-        '#F97316', // Orange
-        '#6366F1', // Indigo
-        '#14B8A6', // Teal
-        '#F472B6', // Pink
-        '#A78BFA', // Purple
-        '#34D399', // Emerald
-        '#FBBF24', // Yellow
-        '#FB7185', // Rose
-        '#60A5FA', // Light Blue
-        '#A3E635', // Lime
-      ][index] || '#6B7280' // Gris par défaut
-    }))
-
-  // const communeData = filteredSubsides // ❌ Supprimé - non utilisé
-  //   .reduce(
-  //     (acc, subside) => {
-  //       const existing = acc.find((item) => item.name === subside.beneficiaire_begunstigde)
-  //       if (existing) {
-  //         existing.value += subside.montant_octroye_toegekend_bedrag
-  //       } else {
-  //         acc.push({ name: subside.beneficiaire_begunstigde, value: subside.montant_octroye_toegekend_bedrag })
-  //       }
-  //       return acc
-  //     },
-  //     [] as { name: string; value: number }[],
-  //   )
-  //   .sort((a, b) => b.value - a.value)
-  //   .slice(0, 10)
-
-  const yearData = filteredSubsides
-    .reduce(
-      (acc, subside) => {
-        const existing = acc.find(
-          (item) =>
-            item.name ===
-            subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend,
-        )
-        if (existing) {
-          existing.value += subside.montant_octroye_toegekend_bedrag
-          existing.count += 1
-        } else {
-          acc.push({
-            name: subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend,
-            value: subside.montant_octroye_toegekend_bedrag,
-            count: 1,
-          })
-        }
-        return acc
-      },
-      [] as { name: string; value: number; count: number }[],
-    )
-    .sort((a, b) => Number.parseInt(a.name) - Number.parseInt(b.name))
 
   // Calcul des totaux avec useMemo pour s'assurer qu'ils sont recalculés
   const totalMontant = useMemo(() => {
@@ -624,41 +448,49 @@ export default function SubsidesDashboard() {
     return dataToUse.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
   }, [filteredSubsides, subsides])
 
-  // Calcul de la plage d'années dynamique
-  const yearRange = useMemo(() => {
-    const dataToUse = filteredSubsides.length > 0 ? filteredSubsides : subsides
-    if (dataToUse.length === 0) return ""
+  // Calcul de la plage d'années dynamique (conservé pour usage futur)
+  // Calcul de la plage d'années dynamique (conservé pour usage futur)
+  // const yearRange = useMemo(() => {
+  //   const dataToUse = filteredSubsides.length > 0 ? filteredSubsides : subsides
+  //   if (dataToUse.length === 0) return ""
+  //   const years = dataToUse.map(s => s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend)
+  //     .filter(year => year && year !== "Non spécifié")
+  //     .map(year => parseInt(year))
+  //     .filter(year => !isNaN(year))
+  //     .sort((a, b) => a - b)
+  //   if (years.length === 0) return ""
+  //   const minYear = Math.min(...years)
+  //   const maxYear = Math.max(...years)
+  //   if (minYear === maxYear) {
+  //     return `(${minYear})`
+  //   } else {
+  //     return `(${minYear}-${maxYear})`
+  //   }
+  // }, [filteredSubsides, subsides])
 
-    const years = dataToUse.map(s => s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend)
-      .filter(year => year && year !== "Non spécifié")
-      .map(year => parseInt(year))
-      .filter(year => !isNaN(year))
-      .sort((a, b) => a - b)
-
-    if (years.length === 0) return ""
-    
-    const minYear = Math.min(...years)
-    const maxYear = Math.max(...years)
-    
-    if (minYear === maxYear) {
-      return `(${minYear})`
-    } else {
-      return `(${minYear}-${maxYear})`
-    }
-  }, [filteredSubsides, subsides])
-
-  // Total pour le camembert (basé sur toutes les données)
-  const totalMontantCamembert = useMemo(() => {
-    return subsides
-      .filter(s => categorizeBeneficiary(s.beneficiaire_begunstigde) !== null)
-      .reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
-  }, [subsides])
-  
   const totalSubsides = useMemo(() => {
     return filteredSubsides.length
   }, [filteredSubsides])
-  const uniqueCategories = [...new Set(subsides.map((s) => categorizeSubside(s.l_objet_de_la_subvention_doel_van_de_subsidie)))]
-  // const uniqueCommunes = [...new Set(subsides.map((s) => s.beneficiaire_begunstigde).filter(Boolean))] // ❌ Supprimé - non utilisé
+
+  // Données pour le mini-graphique d'évolution par année
+  const evolutionData = useMemo(() => {
+    const yearMap = new Map<string, number>()
+    
+    filteredSubsides.forEach(subside => {
+      const year = subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend
+      if (year && year !== 'Non spécifié') {
+        const current = yearMap.get(year) || 0
+        yearMap.set(year, current + subside.montant_octroye_toegekend_bedrag)
+      }
+    })
+    
+    return Array.from(yearMap.entries())
+      .map(([year, amount]) => ({ year, amount }))
+      .sort((a, b) => a.year.localeCompare(b.year))
+      .slice(-6) // Garder les 6 dernières années max pour le mini-graphique
+  }, [filteredSubsides])
+  
+  // Calcul dynamique des catégories uniques retiré - filtre de catégorie supprimé
 
   // Fonction pour tronquer les noms longs (supprimée - non utilisée)
   // const truncateName = (name: string, maxLength: number = 30): string => {
@@ -708,85 +540,105 @@ export default function SubsidesDashboard() {
         </div>
       )}
       
-      <div className="max-w-7xl mx-auto space-y-6 lg:space-y-8">
-        {/* Header avec gradient pastel */}
-        <div className="text-center px-4 sm:px-6 lg:px-8">
-          <div className="mb-6">
-            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-slate-600 bg-clip-text text-transparent">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">Subsides Bruxelles</h1>
-            </div>
-          </div>
-          <p className="text-lg sm:text-xl text-gray-700 mb-4">
-            Données officielles - {totalSubsides} subsides
-          </p>
-          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-200 rounded-xl p-4 sm:p-6 mb-6 inline-block">
-            <p className="text-2xl sm:text-3xl font-bold text-blue-800">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+        {/* Header compact - 1 ligne avec stats - Responsive */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-2.5 sm:p-3">
+          <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-2 xs:gap-3">
+            {/* Titre et stats compactes */}
+            <div className="flex flex-col xs:flex-row items-start xs:items-center gap-1.5 xs:gap-3 flex-1 min-w-0 w-full xs:w-auto">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl md:text-2xl font-bold bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent whitespace-nowrap">
+                  Subsides Bruxelles
+                </h1>
+                <div className="flex items-center gap-1" title="Prenez votre temps, travaillez doucement 💚">
+                  <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-black animate-pulse" style={{ animationDelay: '0s', animationDuration: '2s' }} fill="currentColor" />
+                  <Heart className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 animate-pulse" style={{ animationDelay: '0.4s', animationDuration: '2s' }} fill="currentColor" />
+                  <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 animate-pulse" style={{ animationDelay: '0.8s', animationDuration: '2s' }} fill="currentColor" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 xs:gap-2 text-xs sm:text-sm">
+                <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-0 px-2 py-0.5 sm:py-1 font-semibold text-xs sm:text-sm">
               {totalMontant.toLocaleString()} €
-            </p>
-            <p className="text-sm text-blue-600 font-medium">
-              Montant total {yearRange}
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-4">
-            <Badge className="bg-gradient-to-r from-blue-200 to-indigo-200 text-gray-700 border-0 px-4 py-2 text-sm">
-              {selectedDataYear === "all" ? "Toutes les années" : `Données ${selectedDataYear}`} chargées
             </Badge>
+                <span className="text-gray-600 hidden xs:inline">{totalSubsides} subsides</span>
+                <Badge variant="outline" className="text-xs border-gray-300 px-1.5 py-0.5">
+                  {selectedDataYear === "all" ? "Toutes" : selectedDataYear}
+                </Badge>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex items-center gap-2 w-full xs:w-auto">
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => loadData(selectedDataYear)} 
-              className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border-2 border-blue-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
+                className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm border-gray-300 hover:bg-gray-50 flex-shrink-0"
             >
-              <RefreshCw className="h-4 w-4" />
-              Actualiser
+                <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline ml-1.5">Actualiser</span>
             </Button>
+            </div>
           </div>
         </div>
 
-        {/* Filtres avec design pastel */}
-        <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-          <CardHeader className="bg-gradient-to-r from-blue-200 to-indigo-200 text-gray-800 rounded-t-lg px-4 sm:px-6 py-4">
-            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              <Filter className="w-5 h-5 sm:w-6 sm:h-6" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            {/* Champ de recherche principal avec effet fun */}
-            <div className="mb-6">
-              <label className="text-sm font-semibold text-gray-700 mb-3 block">Recherche principale</label>
+        {/* Navigation principale */}
+        <div className="space-y-3 sm:space-y-4">
+          <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 h-auto">
+            <div className="flex-1 relative">
+              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-blue-500/20 via-indigo-500/20 to-blue-500/20 animate-pulse blur-sm"></div>
+              <div className="relative flex items-center justify-center rounded-md bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300/50 py-2 sm:py-2.5 text-xs sm:text-sm text-gray-800 font-semibold shadow-sm">
+                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-blue-600" />
+                <span className="text-blue-700">Recherche</span>
+              </div>
+            </div>
+            <Link href="/analyse" className="flex-1 relative group">
+              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-green-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+              <Button
+                variant="outline"
+                className="relative w-full rounded-md hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:border-green-300/50 transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 border-gray-200 hover:shadow-md"
+              >
+                <PieChartIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                <span className="hidden sm:inline text-green-700 font-medium">Graphs</span>
+                <span className="sm:hidden text-green-700 font-medium">Graph</span>
+              </Button>
+            </Link>
+          </div>
+
+          {/* Contenu Recherche */}
+          <div className="space-y-4 sm:space-y-6">
+
+        {/* Barre de filtres compacte - Design moderne inspiré Codepink */}
+        <Card className="bg-white border border-gray-200 shadow-sm rounded-lg">
+          <CardContent className="p-3 sm:p-4">
+            {/* Barre de filtres horizontale compacte */}
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
+              {/* Recherche - Prend plus d'espace */}
+              <div className="flex-1 min-w-0">
               <div className="relative">
-                <Search className="absolute left-4 top-4 h-6 w-6 text-blue-400 animate-pulse" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
                 <Input
-                  placeholder="Rechercher un bénéficiaire, un projet ou un numéro de dossier..."
+                    placeholder="Rechercher un bénéficiaire, projet..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-12 h-20 text-6xl font-black text-center border-2 border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all rounded-xl bg-white/90 backdrop-blur-sm shadow-lg hover:shadow-xl tracking-wider placeholder:font-normal placeholder:text-gray-400 placeholder:opacity-70"
-                  style={{
-                    textShadow: searchTerm ? '2px 2px 4px rgba(59, 130, 246, 0.3)' : 'none',
-                    transform: searchTerm ? 'scale(1.02)' : 'scale(1)',
-                    letterSpacing: searchTerm ? '0.1em' : '0.05em',
-                    color: searchTerm ? 'rgba(0,0,0,0)' : 'inherit',
-                    caretColor: '#3B82F6' // Curseur bleu visible
+                  onChange={(e) => {
+                    const value = e.target.value
+                    // Limiter à 24 caractères maximum
+                    if (value.length <= 24) {
+                      setSearchTerm(value)
+                    }
                   }}
-                />
-                {searchTerm && (
-                  <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-                    <div className="text-6xl font-black text-blue-600 animate-pulse tracking-wider relative">
-                      {searchTerm}
-                      {/* Curseur visible par-dessus le texte animé */}
-                      <span className="absolute right-0 top-0 w-1 h-16 bg-blue-600 animate-pulse" style={{ marginLeft: '2px' }}></span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Bouton pour vider la recherche */}
+                  maxLength={24}
+                    className="pl-9 pr-8 h-10 text-sm border-gray-300 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md bg-white"
+                    style={{ caretColor: '#3B82F6' }}
+                  />
                 {searchTerm && (
                   <button
                     onClick={() => setSearchTerm('')}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
                     title="Vider la recherche"
+                      aria-label="Vider la recherche"
                   >
-                    <svg className="w-6 h-6 text-gray-500 hover:text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
@@ -794,92 +646,228 @@ export default function SubsidesDashboard() {
               </div>
             </div>
 
-            {/* Filtres secondaires avec couleurs pastel */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
-              <div>
-                <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-300" />
-                  Année des données
-                </label>
+              {/* Filtres compacts */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-shrink-0">
+                {/* Année */}
                 <Select value={selectedDataYear} onValueChange={(value) => {
                   console.log("Changement d'année:", value)
                   setSelectedDataYear(value)
                 }}>
-                  <SelectTrigger className="h-12 border-2 border-blue-200 focus:border-blue-300 focus:ring-4 focus:ring-blue-100 rounded-xl bg-white/90">
-                    <SelectValue placeholder="Sélectionner l'année" />
+                  <SelectTrigger className="h-10 w-full sm:w-[160px] text-sm border-gray-300 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md bg-white flex items-center justify-center [&>svg]:hidden">
+                    <SelectValue placeholder="Année" className="text-center" />
                   </SelectTrigger>
                   <SelectContent>
                     {availableDataYears.map((year) => (
                       <SelectItem key={`data-year-${year}`} value={year}>
-                        {year === "all" ? "Toutes les années" : `Données ${year}`}
+                        {year === "all" ? "Toutes les années" : year}
                       </SelectItem>
                     ))}
                     {availableDataYears.length === 1 && (
                       <SelectItem value="loading" disabled>
-                        🔄 Détection des fichiers...
+                        🔄 Détection...
                       </SelectItem>
                     )}
                   </SelectContent>
                 </Select>
-              </div>
 
-              <div>
-                <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Building className="w-4 h-4 text-indigo-300" />
-                  Catégorie
-                </label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="h-12 border-2 border-indigo-200 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100 rounded-xl bg-white/90">
-                  <SelectValue placeholder="Catégorie" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les catégories</SelectItem>
-                  {uniqueCategories.sort().map((category, index) => (
-                    <SelectItem key={`category-${index}-${category}`} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              </div>
+                {/* Filtre de catégorie retiré - toujours "toutes les catégories" */}
             </div>
 
-            {/* Boutons d'action avec gradients pastel */}
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSearchTerm("")
-                  setSelectedCategory("all")
-                  setSelectedCommune("all")
-                }}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 border-2 border-gray-200 rounded-xl transition-all"
-              >
-                <Filter className="w-4 h-4" />
-                Réinitialiser les filtres
-              </Button>
-              
+              {/* Boutons d'action compacts */}
+              <div className="flex gap-2 flex-shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => loadData(selectedDataYear)}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 border-2 border-blue-200 rounded-xl transition-all"
+                  className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
+                  title="Actualiser"
               >
-                <RefreshCw className="h-4 w-4" />
-                Réessayer
+                  <RefreshCw className="w-4 h-4" />
               </Button>
+
+                {/* Menu d'export */}
+                <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isExporting || filteredSubsides.length === 0}
+                      className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
+                      title="Exporter les données"
+                    >
+                      <Download className={`w-4 h-4 ${isExporting ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Download className="w-5 h-5" />
+                        Exporter les données
+                      </DialogTitle>
+                      <DialogDescription>
+                        Choisissez les colonnes à exporter et le format de fichier
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    {/* Info sur la sélection des subsides */}
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                      <p className="text-sm font-medium text-green-900">
+                        {filteredSubsides.length} subside{filteredSubsides.length > 1 ? 's' : ''} sera{filteredSubsides.length > 1 ? 'ont' : ''} exporté{filteredSubsides.length > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    
+                    {/* Sélection de colonnes */}
+                    <div className="space-y-3 border-t border-b py-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-gray-700">Colonnes à exporter</h4>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSelectAllColumns}
+                          className="text-xs sm:text-sm h-9 sm:h-8 px-3 sm:px-2 min-h-[44px] sm:min-h-0"
+                        >
+                          {selectedColumns.length === DEFAULT_COLUMNS.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                        {DEFAULT_COLUMNS.map((column) => (
+                          <label
+                            key={column}
+                            className="flex items-center gap-2 p-2 rounded border border-gray-300 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.includes(column)}
+                              onChange={() => handleColumnToggle(column)}
+                              className="w-4 h-4 text-green-900 border-gray-300 rounded focus:ring-green-700"
+                            />
+                            <span className="text-sm sm:text-base text-gray-700">{COLUMN_LABELS[column]}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {selectedColumns.length} colonne{selectedColumns.length > 1 ? 's' : ''} sélectionnée{selectedColumns.length > 1 ? 's' : ''}
+                      </p>
+                    </div>
+
+                    {/* Boutons d'export */}
+                    <div className="space-y-3">
+                      <Button
+                        onClick={() => handleExport('csv')}
+                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
+                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
+                        style={{
+                          backgroundColor: '#A7F3D0', // Pastel vert menthe
+                          borderColor: '#6EE7B7',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#86EFAC'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#A7F3D0'
+                          }
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        Exporter en CSV
+                        <span className="text-xs opacity-75">(Excel compatible)</span>
+                      </Button>
+
+                      <Button
+                        onClick={() => handleExport('excel')}
+                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
+                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
+                        style={{
+                          backgroundColor: '#BFDBFE', // Pastel bleu
+                          borderColor: '#93C5FD',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#93C5FD'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#BFDBFE'
+                          }
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        Exporter en Excel (XLSX)
+                      </Button>
+
+                      <Button
+                        onClick={() => handleExport('json')}
+                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
+                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
+                        style={{
+                          backgroundColor: '#E9D5FF', // Pastel violet lavande
+                          borderColor: '#D8B4FE',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#D8B4FE'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#E9D5FF'
+                          }
+                        }}
+                      >
+                        <Download className="w-4 h-4" />
+                        Exporter en JSON
+                        <span className="text-xs opacity-75">(Développeurs)</span>
+                      </Button>
+
+                      <Button
+                        onClick={() => handleExport('pdf')}
+                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
+                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-semibold transition-all"
+                        style={{
+                          backgroundColor: '#FBCFE8', // Pastel rose
+                          borderColor: '#F9A8D4',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#F9A8D4'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!e.currentTarget.disabled) {
+                            e.currentTarget.style.backgroundColor = '#FBCFE8'
+                          }
+                        }}
+                      >
+                        <FileText className="w-4 h-4" />
+                        Exporter en PDF
+                        <span className="text-xs opacity-75">(summary)</span>
+                      </Button>
+                    </div>
+
+                    {isExporting && (
+                      <div className="text-center text-sm text-gray-500 mt-2">
+                        Export en cours...
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
 
               <Dialog>
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-100 to-indigo-200 hover:from-indigo-200 hover:to-indigo-300 border-2 border-indigo-200 rounded-xl transition-all"
+                      size="sm"
+                      className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
+                      title="Partager"
                   >
                     <Share2 className="w-4 h-4" />
-                    Partager cette vue
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-md">
+                <DialogContent className="w-[95vw] sm:w-full max-w-md p-4 sm:p-6">
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                       <Share2 className="w-5 h-5" />
@@ -891,19 +879,18 @@ export default function SubsidesDashboard() {
                   </DialogHeader>
                   
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {/* Twitter/X */}
                       <Button
                         onClick={() => {
                           const text = "Découvrez la transparence des subsides bruxellois - Données officielles 2019-2024"
                           const url = new URL(window.location.href)
                           url.searchParams.set('year', selectedDataYear)
-                          url.searchParams.set('category', selectedCategory)
                           if (searchTerm) url.searchParams.set('search', searchTerm)
                           const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url.toString())}`
                           window.open(shareUrl, '_blank')
                         }}
-                        className="flex items-center gap-2 bg-black hover:bg-gray-800 text-white"
+                        className="flex items-center justify-center gap-2 bg-black hover:bg-gray-800 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -916,12 +903,11 @@ export default function SubsidesDashboard() {
                         onClick={() => {
                           const url = new URL(window.location.href)
                           url.searchParams.set('year', selectedDataYear)
-                          url.searchParams.set('category', selectedCategory)
                           if (searchTerm) url.searchParams.set('search', searchTerm)
                           const fullText = `Découvrez la transparence des subsides bruxellois ${url.toString()}`
                           window.open(`https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(fullText)}`, '_blank')
                         }}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
@@ -929,14 +915,11 @@ export default function SubsidesDashboard() {
                         LinkedIn
                       </Button>
 
-
-
                       {/* Copier le lien */}
                       <Button
                         onClick={() => {
                           const url = new URL(window.location.href)
                           url.searchParams.set('year', selectedDataYear)
-                          url.searchParams.set('category', selectedCategory)
                           if (searchTerm) url.searchParams.set('search', searchTerm)
                           
                           navigator.clipboard.writeText(url.toString()).then(() => {
@@ -954,7 +937,7 @@ export default function SubsidesDashboard() {
                             setTimeout(() => setShowCopyNotification(false), 2000)
                           })
                         }}
-                        className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white"
+                        className="flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -968,11 +951,10 @@ export default function SubsidesDashboard() {
                           const text = "Découvrez la transparence des subsides bruxellois"
                           const url = new URL(window.location.href)
                           url.searchParams.set('year', selectedDataYear)
-                          url.searchParams.set('category', selectedCategory)
                           if (searchTerm) url.searchParams.set('search', searchTerm)
                           window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + url.toString())}`, '_blank')
                         }}
-                        className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white"
+                        className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
@@ -983,51 +965,66 @@ export default function SubsidesDashboard() {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
                 </CardContent>
               </Card>
 
-                {/* Liste des subsides avec design pastel */}
+        {/* Liste des subsides - Design compact avec dégradés */}
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-          <CardHeader className="bg-gradient-to-r from-indigo-200 to-blue-200 text-gray-800 rounded-t-lg px-4 sm:px-6 py-4">
-            <CardTitle className="text-lg sm:text-xl">Liste des subsides ({filteredSubsides.length} résultats)</CardTitle>
-            <CardDescription className="text-gray-600">Cliquez sur un subside pour voir tous les détails</CardDescription>
+          <CardHeader className="bg-gradient-to-r from-indigo-200 to-blue-200 text-gray-800 rounded-t-lg px-3 sm:px-4 py-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <CardTitle className="text-base sm:text-lg font-semibold">Liste des subsides ({filteredSubsides.length} résultats)</CardTitle>
+                <CardDescription className="text-xs text-gray-700 hidden sm:block">Cliquez pour les détails</CardDescription>
+              </div>
+              {/* Mini-graphique d'évolution */}
+              {evolutionData.length > 1 && (
+                <div className="flex items-center justify-end sm:justify-start flex-shrink-0">
+                  <MiniEvolutionChart 
+                    data={evolutionData}
+                    height={50}
+                    className="w-[200px] sm:w-[400px]"
+                  />
+                </div>
+              )}
+            </div>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              {paginatedSubsides.map((subside, index) => (
+          <CardContent className="p-3 sm:p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-2.5">
+                {paginatedSubsides.map((subside, index) => {
+                return (
                 <Dialog key={`${subside.nom_de_la_subvention_naam_van_de_subsidie}-${subside.beneficiaire_begunstigde}-${subside.article_complet_volledig_artikel}-${index}`}>
                   <DialogTrigger asChild>
-                    <div className="border-2 border-blue-100 rounded-xl p-5 hover:border-blue-200 hover:shadow-lg cursor-pointer transition-all duration-300 bg-white/90 backdrop-blur-sm hover:bg-blue-50/50">
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 
-                          className="font-semibold text-lg text-blue-600 hover:text-blue-700 cursor-pointer underline flex-1 mr-2"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleBeneficiaryClick(subside.beneficiaire_begunstigde)
-                          }}
-                        >
-                          {subside.beneficiaire_begunstigde}
-                        </h3>
-                        <Badge className="bg-gradient-to-r from-blue-200 to-indigo-200 text-gray-700 border-0 text-lg font-bold whitespace-nowrap">
+                    <div className="border-2 rounded-lg p-2.5 sm:p-3 hover:shadow-lg cursor-pointer transition-all bg-white/90 backdrop-blur-sm border-green-100 hover:border-green-300 hover:bg-green-50/50">
+                      
+                      {/* Nom du bénéficiaire */}
+                      <h3 
+                        className="font-semibold text-xs sm:text-sm text-green-700 mb-1.5 sm:mb-2 line-clamp-1"
+                        title={subside.beneficiaire_begunstigde}
+                      >
+                        {subside.beneficiaire_begunstigde}
+                      </h3>
+                      
+                      {/* Montant - Plus discret, sans Badge */}
+                      <div className="mb-1.5 sm:mb-2">
+                        <span className="text-xs sm:text-sm text-gray-600 font-medium">
                           {subside.montant_octroye_toegekend_bedrag.toLocaleString()} €
-                        </Badge>
+                        </span>
                       </div>
-                      <p className="text-gray-600 mb-3 text-sm line-clamp-2">{subside.nom_de_la_subvention_naam_van_de_subsidie}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge className="bg-gradient-to-r from-blue-200 to-cyan-200 text-gray-700 border-0 text-xs">
-                          {categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)}
-                        </Badge>
-                        <Badge className="bg-gradient-to-r from-indigo-200 to-slate-200 text-gray-700 border-0 text-xs">
+                      
+                      {/* Année et Catégorie - Plus petits */}
+                      <div className="flex flex-wrap gap-1 items-center">
+                        <Badge className="bg-gradient-to-r from-indigo-100 to-slate-100 text-gray-600 border-0 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 font-normal">
                           {subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend}
                         </Badge>
-                        <Badge className="bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 border-0 text-xs font-mono">
-                          {subside.article_complet_volledig_artikel}
+                        <Badge className="bg-gradient-to-r from-blue-100 to-cyan-100 text-gray-600 border-0 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 font-normal line-clamp-1">
+                          {categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)}
                         </Badge>
                       </div>
                     </div>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[80vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2">
                         <FileText className="w-5 h-5" />
@@ -1038,36 +1035,57 @@ export default function SubsidesDashboard() {
                       </DialogDescription>
                     </DialogHeader>
 
-                    {/* Liens externes - En haut et colorés */}
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 mb-6">
-                      <h4 className="font-semibold text-lg mb-3 text-gray-800">🔗 Liens externes</h4>
-                      <div className="flex flex-wrap gap-3">
+                          {/* Liens externes - En haut et colorés */}
+                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+                            <h4 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3 text-gray-800">🔗 Liens externes</h4>
+                            <div className="flex flex-wrap gap-2 sm:gap-3">
                         {subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie && (
+                          <>
                           <Button
-                            onClick={() => window.open(`https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html?nummer=${subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie}`, '_blank')}
-                            className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-4 py-2"
+                              onClick={() => {
+                                // Utilise source_url_kbo si disponible, sinon construit l'URL avec le numéro BCE (cohérent avec l'export)
+                                const bceNumber = subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie
+                                const kboUrl = subside.source_url_kbo || (bceNumber ? `https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html?nummer=${bceNumber.trim()}` : null)
+                                if (kboUrl) {
+                                  window.open(kboUrl, '_blank')
+                                }
+                              }}
+                                  className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
                           >
                             <Building className="w-4 h-4" />
                             Registre KBO
                           </Button>
-                        )}
                         <Button
-                          onClick={() => window.open(`https://www.northdata.com/${encodeURIComponent(subside.beneficiaire_begunstigde)}`, '_blank')}
-                          className="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-4 py-2"
+                              onClick={() => {
+                                // North Data fonctionne avec le nom de l'entreprise (pas le numéro BCE)
+                                // Utilise source_url_north_data si disponible (généré avec le nom), sinon construit l'URL
+                                const northDataUrl = subside.source_url_north_data || (() => {
+                                  const encodedName = encodeURIComponent(subside.beneficiaire_begunstigde)
+                                  return `https://www.northdata.com/${encodedName}`
+                                })()
+                                window.open(northDataUrl, '_blank')
+                              }}
+                                className="flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
                         >
                           <FileText className="w-4 h-4" />
                           North Data
                         </Button>
+                          </>
+                        )}
                         <Button
                           onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(subside.beneficiaire_begunstigde + ' Bruxelles subside')}`, '_blank')}
-                          className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-4 py-2"
+                                className="flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
                         >
                           <Search className="w-4 h-4" />
                           Google
                         </Button>
                         <Button
-                          onClick={() => window.open('https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score', '_blank')}
-                          className="flex items-center gap-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 hover:border-violet-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-4 py-2"
+                          onClick={() => {
+                            // Utilise source_url_open_data si disponible, sinon utilise l'URL par défaut (cohérent avec l'export)
+                            const openDataUrl = subside.source_url_open_data || 'https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score'
+                            window.open(openDataUrl, '_blank')
+                          }}
+                                className="flex items-center justify-center gap-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 hover:border-violet-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
                         >
                           <FileText className="w-4 h-4" />
                           Source Data
@@ -1075,37 +1093,63 @@ export default function SubsidesDashboard() {
                       </div>
                     </div>
 
-                    <div className="space-y-6">
-                      {/* Informations financières */}
-                      <div className="space-y-3">
-                        <h4 className="font-semibold text-lg">Informations financières</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <h5 className="font-medium text-sm text-gray-600">Montant octroyé</h5>
-                          <p className="text-2xl font-bold text-green-600">
+                          <div className="space-y-4 sm:space-y-6">
+                            {/* Informations financières */}
+                            <div className="space-y-2 sm:space-y-3">
+                              <h4 className="font-semibold text-base sm:text-lg">Informations financières</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                              <div>
+                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Montant octroyé</h5>
+                                <p className="text-xl sm:text-2xl font-bold text-green-600">
                             {subside.montant_octroye_toegekend_bedrag.toLocaleString()} €
                           </p>
                         </div>
-                        <div>
-                            <h5 className="font-medium text-sm text-gray-600">Montant prévu au budget</h5>
-                            <p className="text-lg font-semibold">
+                              <div>
+                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Montant prévu au budget</h5>
+                                  <p className="text-base sm:text-lg font-semibold">
                               {subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023.toLocaleString()} €
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      {/* Informations bénéficiaire */}
-                      <div className="space-y-3">
-                        <h4 className="font-semibold text-lg">Informations bénéficiaire</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <h5 className="font-medium text-sm text-gray-600">Nom</h5>
-                            <p className="font-semibold">{subside.beneficiaire_begunstigde}</p>
-                          </div>
-                          <div>
-                            <h5 className="font-medium text-sm text-gray-600">Numéro BCE (KBO)</h5>
-                            <p className="text-blue-600">
+                            {/* Informations bénéficiaire */}
+                            <div className="space-y-2 sm:space-y-3">
+                              <h4 className="font-semibold text-base sm:text-lg">Informations bénéficiaire</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                                <div>
+                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Nom</h5>
+                                  <button
+                                    onClick={() => {
+                                      // Créer un filter preset pour partage
+                                      const filterId = createFilterPreset(
+                                        {
+                                          search: subside.beneficiaire_begunstigde,
+                                          year: selectedDataYear !== 'all' ? selectedDataYear : undefined,
+                                        },
+                                        'beneficiary'
+                                      )
+                                      
+                                      // Rediriger vers la liste filtrée
+                                      if (filterId && typeof window !== 'undefined') {
+                                        window.location.href = `/?filter=${filterId}`
+                                      } else {
+                                        // Fallback : appliquer le filtre localement
+                                        setSearchTerm(subside.beneficiaire_begunstigde)
+                                      }
+                                    }}
+                                    className="font-semibold text-sm sm:text-base text-blue-600 hover:text-blue-800 active:text-blue-900 hover:underline active:underline cursor-pointer text-left flex items-center gap-2 group min-h-[44px] sm:min-h-0 py-1 sm:py-0 touch-manipulation"
+                                    title={`Voir tous les subsides de ${subside.beneficiaire_begunstigde}`}
+                                  >
+                                    <span className="flex-1 break-words">{subside.beneficiaire_begunstigde}</span>
+                                    <Badge variant="outline" className="text-xs font-normal opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                      {subsides.filter(s => s.beneficiaire_begunstigde === subside.beneficiaire_begunstigde).length} subside{subsides.filter(s => s.beneficiaire_begunstigde === subside.beneficiaire_begunstigde).length > 1 ? 's' : ''}
+                                    </Badge>
+                                  </button>
+                                </div>
+                                <div>
+                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Numéro BCE (KBO)</h5>
+                            <p className="text-green-600">
                               {subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie ||
                                 "Non spécifié"}
                             </p>
@@ -1113,35 +1157,34 @@ export default function SubsidesDashboard() {
                         </div>
                       </div>
 
-                      {/* Informations projet */}
-                      <div className="space-y-3">
-                        <h4 className="font-semibold text-lg">Projet</h4>
-                        <div>
-                          <h5 className="font-medium text-sm text-gray-600">Nom</h5>
-                          <p>{subside.nom_de_la_subvention_naam_van_de_subsidie}</p>
-                        </div>
-                        <div>
-                          <h5 className="font-medium text-sm text-gray-600">Objectif</h5>
-                          <p>{subside.l_objet_de_la_subvention_doel_van_de_subsidie}</p>
-                        </div>
-                      </div>
+                            {/* Informations projet */}
+                            <div className="space-y-2 sm:space-y-3">
+                              <h4 className="font-semibold text-base sm:text-lg">Projet</h4>
+                              <div>
+                                <h5 className="font-medium text-sm sm:text-base text-gray-600">Nom</h5>
+                                <p className="text-sm sm:text-base">{subside.nom_de_la_subvention_naam_van_de_subsidie}</p>
+                              </div>
+                              <div>
+                                <h5 className="font-medium text-sm sm:text-base text-gray-600">Objectif</h5>
+                                <p className="text-sm sm:text-base">{subside.l_objet_de_la_subvention_doel_van_de_subsidie}</p>
+                              </div>
+                            </div>
 
-                      {/* Informations administratives */}
-                      <div className="space-y-3">
-                        <h4 className="font-semibold text-lg">Informations administratives</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <h5 className="font-medium text-sm text-gray-600">N° de dossier</h5>
+                            {/* Informations administratives */}
+                            <div className="space-y-2 sm:space-y-3">
+                              <h4 className="font-semibold text-base sm:text-lg">Informations administratives</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                                <div>
+                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">N° de dossier</h5>
                             <p className="font-mono">{subside.article_complet_volledig_artikel}</p>
                           </div>
                         </div>
                       </div>
-
-
                     </div>
                   </DialogContent>
                 </Dialog>
-              ))}
+                )
+              })}
 
               {filteredSubsides.length === 0 && (
                 <div className="text-center py-8">
@@ -1158,6 +1201,7 @@ export default function SubsidesDashboard() {
                   size="sm"
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
+                  className="min-h-[44px] sm:min-h-0"
                 >
                   Précédent
                 </Button>
@@ -1205,7 +1249,11 @@ export default function SubsidesDashboard() {
                         size="sm"
                         onClick={() => typeof page === 'number' && setCurrentPage(page)}
                         disabled={page === '...'}
-                        className={currentPage === page ? "bg-blue-600 text-white" : ""}
+                        className={`min-h-[44px] sm:min-h-0 ${currentPage === page ? "text-gray-800 font-medium" : ""}`}
+                        style={currentPage === page ? {
+                          backgroundColor: '#A7F3D0', // Pastel vert menthe
+                          borderColor: '#6EE7B7',
+                        } : undefined}
                       >
                         {page}
                       </Button>
@@ -1218,391 +1266,17 @@ export default function SubsidesDashboard() {
                   size="sm"
                   onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
+                  className="min-h-[44px] sm:min-h-0"
                 >
                   Suivant
                 </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Graphiques avec design pastel */}
-        <Tabs defaultValue="categories" className="mb-6">
-          <TabsList className="grid w-full grid-cols-2 bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-xl p-1">
-            <TabsTrigger 
-              value="categories" 
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all"
-            >
-              Par catégorie
-            </TabsTrigger>
-            <TabsTrigger 
-              value="years"
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all"
-            >
-              Par année
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="categories">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="bg-gradient-to-r from-blue-200 to-cyan-200 text-gray-800 rounded-t-lg px-6 py-4">
-                  <CardTitle className="text-lg">Répartition par catégorie (montants)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ChartContainer
-                    config={{
-                      value: {
-                        label: "Montant",
-                        color: "hsl(var(--chart-1))",
-                      },
-                    }}
-                    className="h-[350px] w-full"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, percent }) => {
-                            // Afficher seulement les labels pour les tranches > 3%
-                            if (percent && percent > 0.03) {
-                              return `${name}\n${(percent * 100).toFixed(0)}%`
-                            }
-                            return ""
-                          }}
-                          outerRadius={80}
-                          innerRadius={20}
-                          dataKey="value"
-                        >
-                          {categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value, name, props) => [
-                            `${Number(value).toLocaleString()} €`, 
-                            props.payload.name
-                          ]}
-                          labelStyle={{ color: '#374151' }}
-                          contentStyle={{ 
-                            backgroundColor: '#fff', 
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                        <Legend 
-                          verticalAlign="bottom" 
-                          height={36}
-                          formatter={(value) => (
-                            <span style={{ color: '#374151', fontSize: '12px' }}>
-                              {value}
-                            </span>
-                          )}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                  </CardContent>
-                </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="bg-gradient-to-r from-indigo-200 to-slate-200 text-gray-800 rounded-t-lg px-6 py-4">
-                  <CardTitle className="text-lg">Nombre de subsides par catégorie</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ChartContainer
-                    config={{
-                      count: {
-                        label: "Nombre",
-                        color: "hsl(var(--chart-2))",
-                      },
-                    }}
-                    className="h-[350px]"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={categoryData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                        <XAxis 
-                          dataKey="name" 
-                          angle={-45} 
-                          textAnchor="end" 
-                          height={80}
-                          tick={{ fontSize: 11, fill: '#6B7280' }}
-                          interval={0}
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 12, fill: '#6B7280' }}
-                          tickFormatter={(value) => value.toLocaleString()}
-                        />
-                        <Tooltip 
-                          formatter={(value, name, props) => [
-                            `${Number(value).toLocaleString()} subsides`, 
-                            props.payload.name
-                          ]}
-                          labelStyle={{ color: '#374151' }}
-                          contentStyle={{ 
-                            backgroundColor: '#fff', 
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                          {categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
                   </CardContent>
                 </Card>
                       </div>
-          </TabsContent>
-
-          <TabsContent value="years">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="bg-gradient-to-r from-blue-200 to-indigo-200 text-gray-800 rounded-t-lg px-6 py-4">
-                  <CardTitle className="text-lg">Évolution des montants par année</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ChartContainer
-                    config={{
-                      value: {
-                        label: "Montant",
-                        color: "hsl(var(--chart-4))",
-                      },
-                    }}
-                    className="h-[350px]"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={yearData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                        <XAxis 
-                          dataKey="name" 
-                          tick={{ fontSize: 12, fill: '#6B7280' }}
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 12, fill: '#6B7280' }}
-                          tickFormatter={(value) => {
-                            if (value >= 1000000) {
-                              return `${(value / 1000000).toFixed(1)}M€`
-                            } else if (value >= 1000) {
-                              return `${(value / 1000).toFixed(0)}K€`
-                            } else {
-                              return `${value.toLocaleString()}€`
-                            }
-                          }}
-                        />
-                        <Tooltip 
-                          formatter={(value) => [`${Number(value).toLocaleString()} €`, "Montant"]}
-                          labelStyle={{ color: '#374151' }}
-                          contentStyle={{ 
-                            backgroundColor: '#fff', 
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                        <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                  </CardContent>
-                </Card>
-
-              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
-                <CardHeader className="bg-gradient-to-r from-slate-200 to-gray-200 text-gray-800 rounded-t-lg px-6 py-4">
-                  <CardTitle className="text-lg">Nombre de subsides par année</CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ChartContainer
-                    config={{
-                      count: {
-                        label: "Nombre",
-                        color: "hsl(var(--chart-5))",
-                      },
-                    }}
-                    className="h-[350px]"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={yearData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                        <XAxis 
-                          dataKey="name" 
-                          tick={{ fontSize: 12, fill: '#6B7280' }}
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 12, fill: '#6B7280' }}
-                          tickFormatter={(value) => value.toLocaleString()}
-                        />
-                        <Tooltip 
-                          formatter={(value) => [`${Number(value).toLocaleString()} subsides`, "Nombre"]}
-                          labelStyle={{ color: '#374151' }}
-                          contentStyle={{ 
-                            backgroundColor: '#fff', 
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                        <Bar dataKey="count" fill="#10B981" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
-                  </CardContent>
-                </Card>
-              </div>
-          </TabsContent>
-        </Tabs>
-
-                {/* Répartition par secteur avec navigation intégrée */}
-        <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl mb-6">
-          <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-slate-200/50 rounded-t-lg px-4 sm:px-6 py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle className="text-lg sm:text-xl flex items-center gap-2 text-slate-800 font-semibold">
-                  <PieChart className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                  Répartition par secteur
-                </CardTitle>
-                <CardDescription className="text-slate-500 text-sm">Analyse des montants par domaine d&apos;activité</CardDescription>
-              </div>
-              
-                            {/* Navigation rapide intégrée */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                {/* Sélecteur d'année */}
-                <Select value={selectedDataYear} onValueChange={(value) => {
-                  setSelectedDataYear(value)
-                  loadData(value)
-                }}>
-                  <SelectTrigger className="w-32 sm:w-36 h-10 border-0 bg-slate-100 hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm font-medium transition-all duration-200">
-                    <SelectValue placeholder="Année" />
-                  </SelectTrigger>
-                  <SelectContent className="border-0 shadow-lg rounded-lg">
-                    <SelectItem value="all" className="hover:bg-slate-50">Toutes</SelectItem>
-                    {availableDataYears
-                      .filter(year => year !== "all")
-                      .sort((a, b) => parseInt(b) - parseInt(a))
-                      .map((year) => (
-                        <SelectItem key={year} value={year} className="hover:bg-slate-50">
-                          {year}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Sélecteur de catégorie */}
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="w-36 sm:w-40 h-10 border-0 bg-slate-100 hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20 rounded-lg text-sm font-medium transition-all duration-200">
-                    <SelectValue placeholder="Catégorie" />
-                  </SelectTrigger>
-                  <SelectContent className="border-0 shadow-lg rounded-lg">
-                    <SelectItem value="all" className="hover:bg-slate-50">Toutes</SelectItem>
-                    {uniqueCategories.sort().map((category, index) => (
-                      <SelectItem key={`category-${index}-${category}`} value={category} className="hover:bg-slate-50">
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {/* Bouton reset */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSearchTerm("")
-                    setSelectedCategory("all")
-                    setSelectedCommune("all")
-                  }}
-                  className="h-10 px-4 bg-slate-100 hover:bg-slate-200 border-0 rounded-lg text-sm font-medium transition-all duration-200"
-                >
-                  Reset
-                </Button>
-                </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <div className="space-y-6">
-              {/* Camembert centré */}
-              <div className="flex justify-center max-w-[500px] mx-auto">
-                <ResponsiveContainer width="100%" height={400}>
-                  <PieChart>
-                    <Pie
-                      data={topBeneficiariesData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={120}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {topBeneficiariesData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value: number, name, props) => {
-                        const sectorName = props.payload.name
-                        // Extraire les mots clés du nom du secteur
-                        const keywords = sectorName.split(' ').slice(0, 3).join(' ')
-                        return [keywords, '']
-                      }}
-                      labelFormatter={() => ''}
-                      contentStyle={{ 
-                        backgroundColor: '#fff', 
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                        fontSize: '14px',
-                        fontWeight: '500'
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Légende en bas avec pourcentages */}
-              <div className="space-y-3">
-              
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {topBeneficiariesData.map((beneficiary) => (
-                  <div 
-                    key={beneficiary.name} 
-                    className="flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md border border-transparent hover:border-blue-200"
-                    onClick={() => handleSectorClick(beneficiary.name)}
-                    title={`Cliquer pour filtrer par secteur: ${beneficiary.name}`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div 
-                        className="w-4 h-4 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: beneficiary.color }}
-                      ></div>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-gray-700 block truncate text-sm hover:text-blue-600 transition-colors" title={beneficiary.name}>
-                          {beneficiary.name}
-                        </span>
-                        <span className="text-xs text-gray-500">({beneficiary.count} subsides)</span>
-                      </div>
-              </div>
-                    <div className="text-right flex-shrink-0 ml-2">
-                      <div className="font-bold text-gray-800 text-sm">
-                        {((beneficiary.value / totalMontantCamembert) * 100).toFixed(1)}%
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {beneficiary.value.toLocaleString()} €
-                      </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-            </div>
+          </div>
+      </div>
     </div>
   )
 }

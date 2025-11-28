@@ -7,7 +7,6 @@
 
 import { describe, it, expect } from 'vitest'
 import { parseAmount, normalizeSubsideData } from '../data-normalizer'
-import type { Subside } from '../../types'
 
 describe('parseAmount', () => {
   it('devrait parser un nombre correctement', () => {

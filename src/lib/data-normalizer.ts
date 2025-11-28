@@ -8,9 +8,15 @@
  * - Les différents formats d'années (2019-2024) peuvent avoir des champs différents
  * - Les types doivent être strictement respectés pour éviter les erreurs silencieuses
  * - La fonction parseAmount doit gérer tous les formats de nombres possibles
+ * 
+ * ✅ AMÉLIORATION #4 : Validation de schéma intégrée (non-bloquante)
+ * - Valide les données avant normalisation
+ * - Continue même si la validation échoue (fallback gracieux)
+ * - Log les erreurs pour le debugging
  */
 
 import type { Subside } from './types'
+import { validateRawSubsidesArray } from './data-validator'
 
 /**
  * Type pour les données brutes non normalisées
@@ -59,6 +65,37 @@ export function parseAmount(value: unknown): number {
  * - Certains champs peuvent être manquants et doivent avoir des valeurs par défaut
  * - Le numéro BCE peut être dans différents champs selon l'année
  */
+/**
+ * Génère les URLs vers les sources externes (sources de données officielles)
+ * Ces URLs sont indépendantes de l'application et pointent vers les sources officielles
+ * Retourne un objet avec les URLs séparées pour meilleure lisibilité dans les exports
+ */
+function generateSourceUrls(
+  bceNumber: string | null,
+  beneficiaire: string
+): { openData: string; northData: string | null; kbo: string | null } {
+  // Source principale : Open Data Brussels - Recherche des subsides
+  const openDataSubsidesUrl = `https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score`
+  
+  // URL vers North Data : recherche par nom d'entreprise (pas par numéro BCE)
+  // North Data utilise le nom de l'entreprise dans l'URL pour la recherche
+  const encodedName = encodeURIComponent(beneficiaire.trim())
+  const northDataUrl = (beneficiaire && beneficiaire.trim() !== '') 
+    ? `https://www.northdata.com/${encodedName}`
+    : null
+  
+  // URL vers le registre KBO (Banque-Carrefour des Entreprises) si numéro BCE disponible
+  const kboUrl = (bceNumber && bceNumber.trim() !== '') 
+    ? `https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html?nummer=${bceNumber.trim()}`
+    : null
+  
+  return {
+    openData: openDataSubsidesUrl,
+    northData: northDataUrl,
+    kbo: kboUrl,
+  }
+}
+
 export function normalizeSubsideData(
   item: unknown,
   year: string
@@ -128,6 +165,15 @@ export function normalizeSubsideData(
     ? String(data.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie)
     : (data.numero_bce_kbo_nummer ? String(data.numero_bce_kbo_nummer) : null)
 
+  // Génération des URLs vers les sources externes (indépendantes de l'application)
+  // North Data nécessite le nom du bénéficiaire, pas le numéro BCE
+  const sourceUrls = generateSourceUrls(bceNumber, beneficiaire)
+  // Conservé pour compatibilité (format combiné)
+  const urlParts = [sourceUrls.openData]
+  if (sourceUrls.northData) urlParts.push(sourceUrls.northData)
+  if (sourceUrls.kbo) urlParts.push(sourceUrls.kbo)
+  const finalSourceUrl = urlParts.join(' | ')
+
   // Construction de l'objet normalisé
   return {
     nom_de_la_subvention_naam_van_de_subsidie: nomSubside,
@@ -143,11 +189,21 @@ export function normalizeSubsideData(
     nom_du_beneficiaire_de_la_subvention_naam_begunstigde_van_de_subsidie: beneficiaire,
     article_budgetaire_begrotingsartikel: article,
     montant_prevu_au_budget_2021_bedrag_voorzien_op_begroting_2021: String(montantPrevu),
+    // URLs sources des données (séparées pour meilleure lisibilité dans les exports)
+    source_url: finalSourceUrl, // Conservé pour compatibilité
+    source_url_open_data: sourceUrls.openData,
+    source_url_north_data: sourceUrls.northData || undefined,
+    source_url_kbo: sourceUrls.kbo || undefined,
   }
 }
 
 /**
  * Normalise un tableau de données brutes en tableau de Subsides
+ * 
+ * ⚠️ VALIDATION INTÉGRÉE (non-bloquante) :
+ * - Valide les données avant normalisation
+ * - Continue même si la validation échoue
+ * - Log les erreurs pour le debugging
  * 
  * @param rawData - Tableau de données brutes depuis le JSON
  * @param year - Année de référence pour les valeurs par défaut
@@ -157,6 +213,27 @@ export function normalizeSubsidesArray(
   rawData: unknown[],
   year: string
 ): Subside[] {
+  // ✅ Validation non-bloquante : valide mais ne bloque pas
+  try {
+    const validationResult = validateRawSubsidesArray(rawData, year)
+    
+    // Si toutes les données sont invalides, on log mais on continue quand même
+    if (validationResult.invalid === validationResult.total && validationResult.total > 0) {
+      console.warn(
+        `[Normalizer ${year}] ⚠️ Toutes les données ont des avertissements, ` +
+        `mais on continue la normalisation quand même`
+      )
+    }
+  } catch (validationError) {
+    // Si la validation elle-même échoue, on log mais on continue
+    console.warn(
+      `[Normalizer ${year}] ⚠️ Erreur lors de la validation, ` +
+      `mais on continue la normalisation:`,
+      validationError
+    )
+  }
+
+  // Normalisation : on continue toujours, même si la validation a échoué
   return rawData.map((item) => normalizeSubsideData(item, year))
 }
 

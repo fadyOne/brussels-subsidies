@@ -120,3 +120,42 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Styles pour les tooltips Recharts - utiliser CustomTooltip maintenant */
+/* Supprimer tous les fonds gris des tooltips par défaut de Recharts */
+.recharts-tooltip-wrapper,
+.recharts-default-tooltip,
+.recharts-tooltip-item-list,
+.recharts-tooltip-item,
+.recharts-tooltip-item-name,
+.recharts-tooltip-item-value,
+.recharts-tooltip-item-separator,
+.recharts-tooltip-item li,
+.recharts-tooltip-item span,
+.recharts-tooltip-item div {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Supprimer les fonds gris sur les barres au survol */
+.recharts-bar-rectangle:hover {
+  fill-opacity: 1 !important;
+  opacity: 1 !important;
+}
+
+/* Supprimer les overlays gris */
+.recharts-active-bar {
+  display: none !important;
+}
+
+/* Cibler les éléments avec des styles inline gris */
+.recharts-wrapper [style*="background-color: rgb(245"],
+.recharts-wrapper [style*="background-color: rgb(249"],
+.recharts-wrapper [style*="background-color: rgb(229"],
+.recharts-wrapper [style*="background-color: #f5f5f5"],
+.recharts-wrapper [style*="background-color: #f9f9f9"],
+.recharts-wrapper [style*="background-color: #e5e5e5"],
+.recharts-wrapper [style*="background-color: #e5e7eb"] {
+  background-color: transparent !important;
+  background: transparent !important;
+}

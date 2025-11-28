@@ -36,13 +36,26 @@ git clone https://github.com/[your-username]/brussels-sub.git
 cd brussels-sub
 
 # Install dependencies
-npm install
+pnpm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local and add your API keys (optional for basic usage)
 
 # Start development server
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Environment Variables
+
+Create a `.env.local` file (see `.env.example` for template):
+
+- `NEXT_PUBLIC_OPENDATA_API_KEY` - Open Data Brussels API key (optional, currently using static files)
+- `NEXT_PUBLIC_SENTRY_DSN` - Sentry DSN for error tracking (optional)
+- `SENTRY_ORG` - Sentry organization (optional)
+- `SENTRY_PROJECT` - Sentry project name (optional)
 
 ## 🤝 Collaboration Welcome!
 
