@@ -492,6 +492,62 @@ export default function SubsidesDashboard() {
   
   // Calcul dynamique des catégories uniques retiré - filtre de catégorie supprimé
 
+  // Fonction pour obtenir le schéma de couleurs selon l'année
+  const getYearColorScheme = useCallback((year: string) => {
+    // Palette de couleurs harmonieuses en tons pastels
+    const colorSchemes: Record<string, {
+      border: string
+      hoverBorder: string
+      hoverBg: string
+      text: string
+    }> = {
+      '2019': {
+        border: 'border-violet-100',
+        hoverBorder: 'hover:border-violet-300',
+        hoverBg: 'hover:bg-violet-50/50',
+        text: 'text-violet-700'
+      },
+      '2020': {
+        border: 'border-pink-100',
+        hoverBorder: 'hover:border-pink-300',
+        hoverBg: 'hover:bg-pink-50/50',
+        text: 'text-pink-700'
+      },
+      '2021': {
+        border: 'border-orange-100',
+        hoverBorder: 'hover:border-orange-300',
+        hoverBg: 'hover:bg-orange-50/50',
+        text: 'text-orange-700'
+      },
+      '2022': {
+        border: 'border-amber-100',
+        hoverBorder: 'hover:border-amber-300',
+        hoverBg: 'hover:bg-amber-50/50',
+        text: 'text-amber-700'
+      },
+      '2023': {
+        border: 'border-green-100',
+        hoverBorder: 'hover:border-green-300',
+        hoverBg: 'hover:bg-green-50/50',
+        text: 'text-green-700'
+      },
+      '2024': {
+        border: 'border-blue-100',
+        hoverBorder: 'hover:border-blue-300',
+        hoverBg: 'hover:bg-blue-50/50',
+        text: 'text-blue-700'
+      }
+    }
+
+    // Retourner le schéma pour l'année ou un schéma par défaut (gris neutre)
+    return colorSchemes[year] || {
+      border: 'border-gray-100',
+      hoverBorder: 'hover:border-gray-300',
+      hoverBg: 'hover:bg-gray-50/50',
+      text: 'text-gray-700'
+    }
+  }, [])
+
   // Fonction pour tronquer les noms longs (supprimée - non utilisée)
   // const truncateName = (name: string, maxLength: number = 30): string => {
   //   if (name.length <= maxLength) return name
@@ -993,14 +1049,18 @@ export default function SubsidesDashboard() {
           <CardContent className="p-3 sm:p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-2.5">
                 {paginatedSubsides.map((subside, index) => {
+                  // Obtenir le schéma de couleurs selon l'année
+                  const year = subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend
+                  const colorScheme = getYearColorScheme(year)
+                  
                 return (
                 <Dialog key={`${subside.nom_de_la_subvention_naam_van_de_subsidie}-${subside.beneficiaire_begunstigde}-${subside.article_complet_volledig_artikel}-${index}`}>
                   <DialogTrigger asChild>
-                    <div className="border-2 rounded-lg p-2.5 sm:p-3 hover:shadow-lg cursor-pointer transition-all bg-white/90 backdrop-blur-sm border-green-100 hover:border-green-300 hover:bg-green-50/50">
+                    <div className={`border-2 rounded-lg p-2.5 sm:p-3 hover:shadow-lg cursor-pointer transition-all bg-white/90 backdrop-blur-sm ${colorScheme.border} ${colorScheme.hoverBorder} ${colorScheme.hoverBg}`}>
                       
                       {/* Nom du bénéficiaire */}
                       <h3 
-                        className="font-semibold text-xs sm:text-sm text-green-700 mb-1.5 sm:mb-2 line-clamp-1"
+                        className={`font-semibold text-xs sm:text-sm ${colorScheme.text} mb-1.5 sm:mb-2 line-clamp-1`}
                         title={subside.beneficiaire_begunstigde}
                       >
                         {subside.beneficiaire_begunstigde}
