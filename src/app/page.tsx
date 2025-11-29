@@ -500,42 +500,63 @@ export default function SubsidesDashboard() {
       hoverBorder: string
       hoverBg: string
       text: string
+      bgFrom: string
+      bgTo: string
+      bgColor: string
     }> = {
       '2019': {
         border: 'border-violet-100',
         hoverBorder: 'hover:border-violet-300',
         hoverBg: 'hover:bg-violet-50/50',
-        text: 'text-violet-700'
+        text: 'text-violet-700',
+        bgFrom: 'from-violet-50',
+        bgTo: 'to-violet-100',
+        bgColor: 'bg-violet-100'
       },
       '2020': {
         border: 'border-pink-100',
         hoverBorder: 'hover:border-pink-300',
         hoverBg: 'hover:bg-pink-50/50',
-        text: 'text-pink-700'
+        text: 'text-pink-700',
+        bgFrom: 'from-pink-50',
+        bgTo: 'to-pink-100',
+        bgColor: 'bg-pink-100'
       },
       '2021': {
         border: 'border-orange-100',
         hoverBorder: 'hover:border-orange-300',
         hoverBg: 'hover:bg-orange-50/50',
-        text: 'text-orange-700'
+        text: 'text-orange-700',
+        bgFrom: 'from-orange-50',
+        bgTo: 'to-orange-100',
+        bgColor: 'bg-orange-100'
       },
       '2022': {
         border: 'border-amber-100',
         hoverBorder: 'hover:border-amber-300',
         hoverBg: 'hover:bg-amber-50/50',
-        text: 'text-amber-700'
+        text: 'text-amber-700',
+        bgFrom: 'from-amber-50',
+        bgTo: 'to-amber-100',
+        bgColor: 'bg-amber-100'
       },
       '2023': {
         border: 'border-green-100',
         hoverBorder: 'hover:border-green-300',
         hoverBg: 'hover:bg-green-50/50',
-        text: 'text-green-700'
+        text: 'text-green-700',
+        bgFrom: 'from-green-50',
+        bgTo: 'to-green-100',
+        bgColor: 'bg-green-100'
       },
       '2024': {
         border: 'border-blue-100',
         hoverBorder: 'hover:border-blue-300',
         hoverBg: 'hover:bg-blue-50/50',
-        text: 'text-blue-700'
+        text: 'text-blue-700',
+        bgFrom: 'from-blue-50',
+        bgTo: 'to-blue-100',
+        bgColor: 'bg-blue-100'
       }
     }
 
@@ -544,7 +565,10 @@ export default function SubsidesDashboard() {
       border: 'border-gray-100',
       hoverBorder: 'hover:border-gray-300',
       hoverBg: 'hover:bg-gray-50/50',
-      text: 'text-gray-700'
+      text: 'text-gray-700',
+      bgFrom: 'from-gray-50',
+      bgTo: 'to-gray-100',
+      bgColor: 'bg-gray-100'
     }
   }, [])
 
@@ -613,7 +637,7 @@ export default function SubsidesDashboard() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 xs:gap-2 text-xs sm:text-sm">
-                <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-0 px-2 py-0.5 sm:py-1 font-semibold text-xs sm:text-sm">
+                <Badge className="text-gray-800 border-0 px-2 py-0.5 sm:py-1 font-semibold text-xs sm:text-sm" style={{ backgroundColor: '#A7F3D0', borderColor: '#6EE7B7' }}>
               {totalMontant.toLocaleString()} €
             </Badge>
                 <span className="text-gray-600 hidden xs:inline">{totalSubsides} subsides</span>
@@ -670,35 +694,40 @@ export default function SubsidesDashboard() {
             {/* Barre de filtres horizontale compacte */}
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
               {/* Recherche - Prend plus d'espace */}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 group">
               <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
-                <Input
-                    placeholder="Rechercher un bénéficiaire, projet..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    // Limiter à 24 caractères maximum
-                    if (value.length <= 24) {
-                      setSearchTerm(value)
-                    }
-                  }}
-                  maxLength={24}
-                    className="pl-9 pr-8 h-10 text-sm border-gray-300 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md bg-white"
-                    style={{ caretColor: '#3B82F6' }}
-                  />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
-                    title="Vider la recherche"
-                      aria-label="Vider la recherche"
-                  >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
+                  {/* Glow effect au focus */}
+                  <div className="absolute -inset-0.5 rounded-lg bg-gradient-to-r from-green-400/30 via-emerald-400/30 to-green-400/30 opacity-0 group-focus-within:opacity-100 blur transition-opacity duration-300 pointer-events-none"></div>
+                  
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-green-600 z-10 transition-colors duration-200 group-focus-within:text-green-700" />
+                    <Input
+                        placeholder="Rechercher un bénéficiaire, projet..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        // Limiter à 24 caractères maximum
+                        if (value.length <= 24) {
+                          setSearchTerm(value)
+                        }
+                      }}
+                      maxLength={24}
+                        className="pl-9 sm:pl-10 pr-8 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-green-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg"
+                        style={{ caretColor: '#10b981' }}
+                      />
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                          className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-green-600 hover:text-green-700 hover:bg-green-100 rounded-full p-1 transition-all duration-200 z-10 min-h-[44px] sm:min-h-0 flex items-center justify-center"
+                        title="Vider la recherche"
+                          aria-label="Vider la recherche"
+                      >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
               </div>
             </div>
 
@@ -1084,20 +1113,30 @@ export default function SubsidesDashboard() {
                       </div>
                     </div>
                   </DialogTrigger>
-                  <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[80vh] overflow-y-auto p-4 sm:p-6">
-                    <DialogHeader>
-                      <DialogTitle className="flex items-center gap-2">
-                        <FileText className="w-5 h-5" />
-                        {subside.beneficiaire_begunstigde}
-                      </DialogTitle>
-                      <DialogDescription>
-                        Détails complets du subside {subside.nom_de_la_subvention_naam_van_de_subsidie}
-                      </DialogDescription>
-                    </DialogHeader>
+                  <DialogContent className={`w-[95vw] sm:w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-0 border-2 ${colorScheme.border} rounded-lg`}>
+                    {/* Header avec couleur de l'année */}
+                    <div className={`bg-gradient-to-r ${colorScheme.bgFrom} ${colorScheme.bgTo} rounded-t-lg px-4 sm:px-6 py-3 sm:py-4 border-b-2 ${colorScheme.border}`}>
+                      <DialogHeader className="space-y-1 sm:space-y-2">
+                        <DialogTitle className={`flex items-center gap-2 text-sm sm:text-base ${colorScheme.text} font-semibold line-clamp-2`}>
+                          <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                          <span className="break-words">{subside.beneficiaire_begunstigde}</span>
+                        </DialogTitle>
+                        {/* Badge année */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Badge className={`${colorScheme.bgColor} ${colorScheme.text} border-0 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 font-semibold`}>
+                            {year}
+                          </Badge>
+                        </div>
+                      </DialogHeader>
+                    </div>
 
-                          {/* Liens externes - En haut et colorés */}
-                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-                            <h4 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3 text-gray-800">🔗 Liens externes</h4>
+                    {/* Contenu scrollable */}
+                    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+                          {/* Liens externes - En haut et colorés avec style de l'année */}
+                          <div className={`bg-gradient-to-r ${colorScheme.bgFrom} ${colorScheme.bgTo} rounded-lg p-3 sm:p-4 border ${colorScheme.border}`}>
+                            <h4 className={`font-semibold text-sm sm:text-base mb-2 sm:mb-3 ${colorScheme.text}`}>
+                              Liens externes
+                            </h4>
                             <div className="flex flex-wrap gap-2 sm:gap-3">
                         {subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie && (
                           <>
@@ -1156,17 +1195,19 @@ export default function SubsidesDashboard() {
                           <div className="space-y-4 sm:space-y-6">
                             {/* Informations financières */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className="font-semibold text-base sm:text-lg">Informations financières</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                              <div>
-                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Montant octroyé</h5>
-                                <p className="text-xl sm:text-2xl font-bold text-green-600">
+                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                                Informations financières
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                              <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
+                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Montant octroyé</h5>
+                                <p className={`text-lg sm:text-xl md:text-2xl font-bold ${colorScheme.text}`}>
                             {subside.montant_octroye_toegekend_bedrag.toLocaleString()} €
                           </p>
                         </div>
-                              <div>
-                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Montant prévu au budget</h5>
-                                  <p className="text-base sm:text-lg font-semibold">
+                              <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
+                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Montant prévu au budget</h5>
+                                  <p className={`text-base sm:text-lg font-semibold ${colorScheme.text}`}>
                               {subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023.toLocaleString()} €
                             </p>
                           </div>
@@ -1175,10 +1216,12 @@ export default function SubsidesDashboard() {
 
                             {/* Informations bénéficiaire */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className="font-semibold text-base sm:text-lg">Informations bénéficiaire</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                                <div>
-                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Nom</h5>
+                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                                Informations bénéficiaire
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
+                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Nom</h5>
                                   <button
                                     onClick={() => {
                                       // Créer un filter preset pour partage
@@ -1198,18 +1241,18 @@ export default function SubsidesDashboard() {
                                         setSearchTerm(subside.beneficiaire_begunstigde)
                                       }
                                     }}
-                                    className="font-semibold text-sm sm:text-base text-blue-600 hover:text-blue-800 active:text-blue-900 hover:underline active:underline cursor-pointer text-left flex items-center gap-2 group min-h-[44px] sm:min-h-0 py-1 sm:py-0 touch-manipulation"
+                                    className={`font-semibold text-sm sm:text-base ${colorScheme.text} hover:opacity-80 active:opacity-70 hover:underline active:underline cursor-pointer text-left flex items-center gap-2 group min-h-[44px] sm:min-h-0 py-1 sm:py-0 touch-manipulation w-full`}
                                     title={`Voir tous les subsides de ${subside.beneficiaire_begunstigde}`}
                                   >
                                     <span className="flex-1 break-words">{subside.beneficiaire_begunstigde}</span>
-                                    <Badge variant="outline" className="text-xs font-normal opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                    <Badge variant="outline" className={`text-xs font-normal opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 ${colorScheme.border}`}>
                                       {subsides.filter(s => s.beneficiaire_begunstigde === subside.beneficiaire_begunstigde).length} subside{subsides.filter(s => s.beneficiaire_begunstigde === subside.beneficiaire_begunstigde).length > 1 ? 's' : ''}
                                     </Badge>
                                   </button>
                                 </div>
-                                <div>
-                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">Numéro BCE (KBO)</h5>
-                            <p className="text-green-600">
+                                <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
+                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Numéro BCE (KBO)</h5>
+                            <p className={`${colorScheme.text} font-medium`}>
                               {subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie ||
                                 "Non spécifié"}
                             </p>
@@ -1219,27 +1262,32 @@ export default function SubsidesDashboard() {
 
                             {/* Informations projet */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className="font-semibold text-base sm:text-lg">Projet</h4>
-                              <div>
-                                <h5 className="font-medium text-sm sm:text-base text-gray-600">Nom</h5>
-                                <p className="text-sm sm:text-base">{subside.nom_de_la_subvention_naam_van_de_subsidie}</p>
-                              </div>
-                              <div>
-                                <h5 className="font-medium text-sm sm:text-base text-gray-600">Objectif</h5>
-                                <p className="text-sm sm:text-base">{subside.l_objet_de_la_subvention_doel_van_de_subsidie}</p>
+                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                                Projet
+                              </h4>
+                              <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm space-y-3 sm:space-y-4`}>
+                                <div>
+                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Nom</h5>
+                                  <p className="text-sm sm:text-base font-medium">{subside.nom_de_la_subvention_naam_van_de_subsidie}</p>
+                                </div>
+                                <div>
+                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Objectif</h5>
+                                  <p className="text-sm sm:text-base">{subside.l_objet_de_la_subvention_doel_van_de_subsidie}</p>
+                                </div>
                               </div>
                             </div>
 
                             {/* Informations administratives */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className="font-semibold text-base sm:text-lg">Informations administratives</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                                <div>
-                                  <h5 className="font-medium text-sm sm:text-base text-gray-600">N° de dossier</h5>
-                            <p className="font-mono">{subside.article_complet_volledig_artikel}</p>
+                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                                Informations administratives
+                              </h4>
+                              <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
+                                <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">N° de dossier</h5>
+                            <p className={`font-mono text-sm sm:text-base ${colorScheme.text} font-semibold`}>{subside.article_complet_volledig_artikel}</p>
                           </div>
-                        </div>
                       </div>
+                    </div>
                     </div>
                   </DialogContent>
                 </Dialog>

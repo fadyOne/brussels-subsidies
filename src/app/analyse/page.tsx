@@ -681,7 +681,7 @@ export default function AnalysePage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 xs:gap-2 text-xs sm:text-sm">
-                <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-0 px-2 py-0.5 sm:py-1 font-semibold text-xs sm:text-sm">
+                <Badge className="text-gray-800 border-0 px-2 py-0.5 sm:py-1 font-semibold text-xs sm:text-sm" style={{ backgroundColor: '#A7F3D0', borderColor: '#6EE7B7' }}>
                   {totalAmount.toLocaleString()} €
                 </Badge>
                 <span className="text-gray-600 hidden xs:inline">{totalSubsides} subsides</span>
