@@ -47,14 +47,22 @@ export const Top10PieChart: React.FC<Top10PieChartProps> = ({
   // Calculer le total pour les pourcentages
   const total = pieData.reduce((sum, item) => sum + item.value, 0)
 
-  // Hauteur responsive - augmentée pour laisser place à la légende en bas
-  const height = responsiveProps.isMobile ? 500 : 600
+  const isVerticalLegend = responsiveProps.isMobile || responsiveProps.isTablet
+  
+  // Hauteur du graphique sans légende intégrée en mode responsive
+  const height = responsiveProps.isMobile ? 400 : responsiveProps.isTablet ? 500 : 600
 
   return (
-    <div style={{ height: `${height}px`, width: '100%' }}>
-      <ResponsivePie
-        data={pieData}
-        margin={{ top: 40, right: 40, bottom: 200, left: 40 }} // Plus d'espace en bas pour la légende
+    <>
+      <div style={{ height: `${height}px`, width: '100%' }}>
+        <ResponsivePie
+          data={pieData}
+          margin={{ 
+            top: 40, 
+            right: 40, 
+            bottom: isVerticalLegend ? 40 : 120, // Moins d'espace en bas en mode responsive (légende séparée)
+            left: 40 
+          }}
         innerRadius={0.5}
         padAngle={2}
         cornerRadius={4}
@@ -71,20 +79,20 @@ export const Top10PieChart: React.FC<Top10PieChartProps> = ({
         arcLinkLabelsColor={{ from: 'color' }}
         enableArcLabels={false} // Désactiver les labels sur les segments (trop encombrés)
         enableArcLinkLabels={false} // Désactiver les liens pour plus de clarté
-        legends={[
+        legends={isVerticalLegend ? [] : [
           {
             anchor: 'bottom',
-            direction: 'row', // Légende en ligne (horizontal)
+            direction: 'row', // Légende horizontale uniquement sur desktop
             justify: false,
             translateX: 0,
-            translateY: 80, // Position en bas
-            itemsSpacing: responsiveProps.isMobile ? 8 : 12,
-            itemWidth: responsiveProps.isMobile ? 140 : 200, // Largeur suffisante pour les noms longs
-            itemHeight: responsiveProps.isMobile ? 20 : 24,
+            translateY: 80,
+            itemsSpacing: 12,
+            itemWidth: 200,
+            itemHeight: 28,
             itemTextColor: '#333',
             itemDirection: 'left-to-right',
             itemOpacity: 1,
-            symbolSize: responsiveProps.isMobile ? 14 : 18,
+            symbolSize: 18,
             symbolShape: 'circle',
             effects: [
               {
@@ -142,7 +150,48 @@ export const Top10PieChart: React.FC<Top10PieChartProps> = ({
           }
         }}
       />
-    </div>
+      </div>
+      
+      {/* Légende séparée pour mobile/tablette */}
+      {isVerticalLegend && (
+        <div className="mt-4 p-4 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {pieData.map((item, index) => {
+              const percentage = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0'
+              return (
+                <div 
+                  key={item.id} 
+                  className="flex items-center gap-2 sm:gap-3 p-2 rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => {
+                    if (onSliceClick) {
+                      onSliceClick({
+                        name: item.fullName || String(item.label),
+                        value: item.value,
+                        rank: item.rank,
+                        label: item.fullName || String(item.label),
+                      })
+                    }
+                  }}
+                >
+                  <div 
+                    className="w-4 h-4 rounded-full flex-shrink-0" 
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate" title={item.fullName || String(item.label)}>
+                      {item.fullName || item.label}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {item.value.toLocaleString()} € ({percentage}%)
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

@@ -646,19 +646,6 @@ export default function SubsidesDashboard() {
                 </Badge>
               </div>
             </div>
-            
-            {/* Actions */}
-            <div className="flex items-center gap-2 w-full xs:w-auto">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => loadData(selectedDataYear)} 
-                className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm border-gray-300 hover:bg-gray-50 flex-shrink-0"
-            >
-                <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline ml-1.5">Actualiser</span>
-            </Button>
-            </div>
           </div>
         </div>
 

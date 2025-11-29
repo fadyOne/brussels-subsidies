@@ -98,7 +98,13 @@ export default function AnalysePage() {
   const topBeneficiariesCount = 10 // Fixé à 10, sélecteur retiré
   
   // État pour le type de graphique (pie, list, bar)
-  const [top10ChartType, setTop10ChartType] = useState<'pie' | 'list' | 'bar'>('pie')
+  // Par défaut: 'list' sur mobile, 'pie' sur desktop
+  const [top10ChartType, setTop10ChartType] = useState<'pie' | 'list' | 'bar'>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 640 ? 'list' : 'pie' // 640px = sm breakpoint
+    }
+    return 'pie'
+  })
   
   // Responsive chart props
   const responsiveProps = useResponsiveChart()
@@ -690,19 +696,6 @@ export default function AnalysePage() {
                 </Badge>
               </div>
             </div>
-            
-            {/* Actions */}
-            <div className="flex items-center gap-2 w-full xs:w-auto">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => loadData(selectedDataYear)} 
-                className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm border-gray-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300/50 hover:shadow-sm transition-all flex-shrink-0"
-            >
-                <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline ml-1.5">Actualiser</span>
-            </Button>
-            </div>
           </div>
         </div>
 
@@ -732,24 +725,24 @@ export default function AnalysePage() {
 
         {/* Sous-onglets pour les graphiques */}
         <Tabs defaultValue="top-beneficiaries" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1.5 h-auto">
+          <TabsList className="!w-full !inline-grid !grid-cols-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 sm:p-1.5 !h-auto gap-1">
             <TabsTrigger 
               value="top-beneficiaries" 
-              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 flex items-center justify-center"
+              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-[11px] xs:text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-1.5 sm:px-2 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words"
             >
-              Top Bénéficiaires
+              <span className="text-center leading-tight">Top Bénéficiaires</span>
             </TabsTrigger>
             <TabsTrigger 
               value="by-category" 
-              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 flex items-center justify-center"
+              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-[11px] xs:text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-1.5 sm:px-2 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words"
             >
-              Par catégorie
+              <span className="text-center leading-tight">Par catégorie</span>
             </TabsTrigger>
             <TabsTrigger 
               value="comparison"
-              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 flex items-center justify-center"
+              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-[11px] xs:text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-1.5 sm:px-2 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words"
             >
-              Comparaison
+              <span className="text-center leading-tight">Comparaison</span>
             </TabsTrigger>
           </TabsList>
 
@@ -809,11 +802,13 @@ export default function AnalysePage() {
                 </CardHeader>
                 <CardContent className="p-6">
                   {top10ChartType === 'pie' && (
-                    <Top10PieChart
-                      data={chartData}
-                      colors={COLORS}
-                      onSliceClick={handleBarClick}
-                    />
+                    <div className="space-y-4">
+                      <Top10PieChart
+                        data={chartData}
+                        colors={COLORS}
+                        onSliceClick={handleBarClick}
+                      />
+                    </div>
                   )}
                   {top10ChartType === 'list' && (
                     <Top10ListChart
