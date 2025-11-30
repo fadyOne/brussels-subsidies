@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer } from "@/components/ui/chart"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, Heart, PieChart as PieChartIcon, RefreshCw, Search } from "lucide-react"
+import { AlertCircle, Heart, Info, PieChart as PieChartIcon, RefreshCw, Search } from "lucide-react"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
@@ -696,6 +696,21 @@ export default function AnalysePage() {
                 </Badge>
               </div>
             </div>
+            
+            {/* Actions */}
+            <div className="flex items-center gap-2 w-full xs:w-auto">
+            <Link href="/aide">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm border-gray-300 hover:bg-gray-50 flex-shrink-0"
+                title="Aide et informations"
+              >
+                <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline ml-1.5">Aide</span>
+              </Button>
+            </Link>
+            </div>
           </div>
         </div>
 
@@ -725,26 +740,28 @@ export default function AnalysePage() {
 
         {/* Sous-onglets pour les graphiques */}
         <Tabs defaultValue="top-beneficiaries" className="space-y-4 sm:space-y-6">
-          <TabsList className="!w-full !inline-grid !grid-cols-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 sm:p-1.5 !h-auto gap-1">
-            <TabsTrigger 
-              value="top-beneficiaries" 
-              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-[11px] xs:text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-1.5 sm:px-2 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words"
-            >
-              <span className="text-center leading-tight">Top Bénéficiaires</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="by-category" 
-              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-[11px] xs:text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-1.5 sm:px-2 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words"
-            >
-              <span className="text-center leading-tight">Par catégorie</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="comparison"
-              className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 transition-all text-[11px] xs:text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-1.5 sm:px-2 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words"
-            >
-              <span className="text-center leading-tight">Comparaison</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="w-full bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 sm:p-1.5">
+            <TabsList className="grid grid-cols-3 w-full h-auto gap-1 bg-transparent p-0 border-0">
+              <TabsTrigger 
+                value="top-beneficiaries" 
+                className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
+              >
+                Top Bénéficiaires
+              </TabsTrigger>
+              <TabsTrigger 
+                value="by-category" 
+                className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
+              >
+                Par catégorie
+              </TabsTrigger>
+              <TabsTrigger 
+                value="comparison"
+                className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
+              >
+                Comparaison
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Nouvel onglet Top Bénéficiaires */}
           <TabsContent value="top-beneficiaries" className="space-y-6">
