@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Building, Download, FileText, Heart, PieChart as PieChartIcon, RefreshCw, Search, Share2 } from "lucide-react"
-import Link from "next/link"
+import { AlertCircle, Building, Download, FileText, RefreshCw, Search, Share2 } from "lucide-react"
+import { AppHeader } from "@/components/AppHeader"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { Subside } from '@/lib/types'
@@ -621,59 +621,17 @@ export default function SubsidesDashboard() {
       )}
       
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-        {/* Header compact - 1 ligne avec stats - Responsive */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-2.5 sm:p-3">
-          <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-2 xs:gap-3">
-            {/* Titre et stats compactes */}
-            <div className="flex flex-col xs:flex-row items-start xs:items-center gap-1.5 xs:gap-3 flex-1 min-w-0 w-full xs:w-auto">
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl md:text-2xl font-bold bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent whitespace-nowrap">
-                  Subsides Bruxelles
-                </h1>
-                <div className="flex items-center gap-1" title="Prenez votre temps, travaillez doucement 💚">
-                  <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-black animate-pulse" style={{ animationDelay: '0s', animationDuration: '2s' }} fill="currentColor" />
-                  <Heart className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 animate-pulse" style={{ animationDelay: '0.4s', animationDuration: '2s' }} fill="currentColor" />
-                  <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 animate-pulse" style={{ animationDelay: '0.8s', animationDuration: '2s' }} fill="currentColor" />
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 xs:gap-2 text-xs sm:text-sm">
-                <Badge className="text-gray-800 border-0 px-2 py-0.5 sm:py-1 font-semibold text-xs sm:text-sm" style={{ backgroundColor: '#A7F3D0', borderColor: '#6EE7B7' }}>
-              {totalMontant.toLocaleString()} €
-            </Badge>
-                <span className="text-gray-600 hidden xs:inline">{totalSubsides} subsides</span>
-                <Badge variant="outline" className="text-xs border-gray-300 px-1.5 py-0.5">
-                  {selectedDataYear === "all" ? "Toutes" : selectedDataYear}
-                </Badge>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AppHeader
+          totalAmount={totalMontant}
+          totalSubsides={totalSubsides}
+          selectedYear={selectedDataYear}
+          currentPage="search"
+          showStats={true}
+          showNavigation={true}
+        />
 
-        {/* Navigation principale */}
-        <div className="space-y-3 sm:space-y-4">
-          <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 h-auto">
-            <div className="flex-1 relative">
-              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-blue-500/20 via-indigo-500/20 to-blue-500/20 animate-pulse blur-sm"></div>
-              <div className="relative flex items-center justify-center rounded-md bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300/50 py-2 sm:py-2.5 text-xs sm:text-sm text-gray-800 font-semibold shadow-sm">
-                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-blue-600" />
-                <span className="text-blue-700">Recherche</span>
-              </div>
-            </div>
-            <Link href="/analyse" className="flex-1 relative group">
-              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-green-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
-              <Button
-                variant="outline"
-                className="relative w-full rounded-md hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:border-green-300/50 transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 border-gray-200 hover:shadow-md"
-              >
-                <PieChartIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                <span className="hidden sm:inline text-green-700 font-medium">Graphs</span>
-                <span className="sm:hidden text-green-700 font-medium">Graph</span>
-              </Button>
-            </Link>
-          </div>
-
-          {/* Contenu Recherche */}
-          <div className="space-y-4 sm:space-y-6">
+        {/* Contenu Recherche */}
+        <div className="space-y-4 sm:space-y-6">
 
         {/* Barre de filtres compacte - Design moderne inspiré Codepink */}
         <Card className="bg-white border border-gray-200 shadow-sm rounded-lg">
@@ -716,7 +674,7 @@ export default function SubsidesDashboard() {
                     )}
                   </div>
               </div>
-            </div>
+              </div>
 
               {/* Filtres compacts */}
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-shrink-0">
@@ -747,16 +705,6 @@ export default function SubsidesDashboard() {
 
               {/* Boutons d'action compacts */}
               <div className="flex gap-2 flex-shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadData(selectedDataYear)}
-                  className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
-                  title="Actualiser"
-              >
-                  <RefreshCw className="w-4 h-4" />
-              </Button>
-
                 {/* Menu d'export */}
                 <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
                   <DialogTrigger asChild>
@@ -1367,10 +1315,9 @@ export default function SubsidesDashboard() {
                 </Button>
               </div>
             )}
-                  </CardContent>
-                </Card>
-                      </div>
-          </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
