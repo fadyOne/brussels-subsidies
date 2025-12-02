@@ -1,0 +1,29 @@
+{
+  "sources": [
+    "https://www.bruxelles.be/ordres-du-jour-proces-verbaux-motions"
+  ],
+  "settings": {
+    "maxConcurrentDownloads": 5,
+    "retryAttempts": 3,
+    "rateLimit": 1000,
+    "timeout": 30000,
+    "userAgent": "Mozilla/5.0 (compatible; PDF-Downloader/1.0)"
+  },
+  "recursive": {
+    "enabled": true,
+    "maxDepth": 10,
+    "allowedPatterns": [
+      "/ordres-du-jour",
+      "/proces-verbaux",
+      "/motions",
+      "/documents",
+      "/rapports"
+    ],
+    "allowedDomains": [
+      "bruxelles.be",
+      "www.bruxelles.be"
+    ],
+    "rateLimit": 2000
+  }
+}
+

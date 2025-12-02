@@ -157,7 +157,7 @@ export const NivoBarChart: React.FC<NivoBarChartProps> = ({
                 strokeWidth: 1,
               },
               text: {
-                fill: '#6B7280',
+                fill: '#1e3a8a', // Bleu foncé (blue-900)
                 fontSize: tickFontSize,
               },
             },

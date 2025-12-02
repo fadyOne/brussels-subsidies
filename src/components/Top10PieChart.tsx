@@ -47,14 +47,14 @@ export const Top10PieChart: React.FC<Top10PieChartProps> = ({
   // Calculer le total pour les pourcentages
   const total = pieData.reduce((sum, item) => sum + item.value, 0)
 
-  // Hauteur responsive - augmentée pour laisser place à la légende en bas
-  const height = responsiveProps.isMobile ? 500 : 600
+  // Hauteur responsive - réduite car la légende est séparée
+  const height = responsiveProps.isMobile ? 400 : 500
 
   return (
     <div style={{ height: `${height}px`, width: '100%' }}>
       <ResponsivePie
         data={pieData}
-        margin={{ top: 40, right: 40, bottom: 200, left: 40 }} // Plus d'espace en bas pour la légende
+        margin={{ top: 40, right: 40, bottom: 40, left: 40 }} // Marges réduites car légende séparée
         innerRadius={0.5}
         padAngle={2}
         cornerRadius={4}
@@ -71,32 +71,7 @@ export const Top10PieChart: React.FC<Top10PieChartProps> = ({
         arcLinkLabelsColor={{ from: 'color' }}
         enableArcLabels={false} // Désactiver les labels sur les segments (trop encombrés)
         enableArcLinkLabels={false} // Désactiver les liens pour plus de clarté
-        legends={[
-          {
-            anchor: 'bottom',
-            direction: 'row', // Légende en ligne (horizontal)
-            justify: false,
-            translateX: 0,
-            translateY: 80, // Position en bas
-            itemsSpacing: responsiveProps.isMobile ? 8 : 12,
-            itemWidth: responsiveProps.isMobile ? 140 : 200, // Largeur suffisante pour les noms longs
-            itemHeight: responsiveProps.isMobile ? 20 : 24,
-            itemTextColor: '#333',
-            itemDirection: 'left-to-right',
-            itemOpacity: 1,
-            symbolSize: responsiveProps.isMobile ? 14 : 18,
-            symbolShape: 'circle',
-            effects: [
-              {
-                on: 'hover',
-                style: {
-                  itemTextColor: '#000',
-                  itemOpacity: 1,
-                },
-              },
-            ],
-          },
-        ]}
+        legends={[]} // Légende désactivée - sera affichée séparément
         tooltip={({ datum }) => {
           const percentage = total > 0 ? ((datum.value / total) * 100).toFixed(1) : '0'
           const fullName = (datum.data as { fullName?: string }).fullName || String(datum.label)

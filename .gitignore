@@ -18,7 +18,6 @@ yarn.lock
 # Next.js
 /.next/
 /out/
-
 # Production
 /build
 
@@ -49,3 +48,12 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+
+# PDFs and large data files (not for Vercel/Git)
+data/pdfs/raw/
+data/pdfs/json/
+data/cache/
+data/extracted/
+*.pdf
+*.tar.gz
+backup-*.tar.gz
