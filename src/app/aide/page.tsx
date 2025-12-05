@@ -1,12 +1,14 @@
 "use client"
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { FileText, Search, PieChart, Download, ExternalLink, ArrowLeft, Info } from "lucide-react"
-import Link from "next/link"
+import { FileText, Search, PieChart, Download, ExternalLink, Info } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
+import { AppFooter } from "@/components/AppFooter"
+import { getCachedData, setCachedData } from "@/lib/cache"
+import { normalizeSubsidesArray } from "@/lib/data-normalizer"
+import type { Subside } from "@/lib/types"
 
 type Language = "fr" | "nl" | "en" | "de"
 
@@ -70,7 +72,7 @@ const content: Record<Language, HelpContent> = {
       title: "Source",
       description: "Toutes les données proviennent de la plateforme officielle Open Data Brussels, gérée par la Ville de Bruxelles. Les données sont mises à jour chaque année et couvrent la période de 2019 à 2024.",
       source: "Open Data Brussels",
-      link: "https://opendata.brussels.be"
+      link: "https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score"
     },
     howToUse: {
       title: "Utilisation",
@@ -110,8 +112,8 @@ const content: Record<Language, HelpContent> = {
     },
     credits: {
       title: "À propos",
-      organization: "Piknik Elektronik Asbl",
-      description: "Cette application web a été développée par Piknik Elektronik Asbl sans aucun financement public, pour une société plus juste et plus transparente."
+      organization: "BoringLess",
+      description: "Cette application web a été développée par BoringLess sans aucun financement public, pour une société plus juste et plus transparente."
     }
   },
   nl: {
@@ -136,7 +138,7 @@ const content: Record<Language, HelpContent> = {
       title: "Bron",
       description: "Alle gegevens komen van het officiële Open Data Brussels-platform, beheerd door de Stad Brussel. De gegevens worden elk jaar bijgewerkt en beslaan de periode van 2019 tot 2024.",
       source: "Open Data Brussels",
-      link: "https://opendata.brussels.be"
+      link: "https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score"
     },
     howToUse: {
       title: "Gebruik",
@@ -176,8 +178,8 @@ const content: Record<Language, HelpContent> = {
     },
     credits: {
       title: "Over",
-      organization: "Piknik Elektronik Asbl",
-      description: "Deze webapplicatie is ontwikkeld door Piknik Elektronik Asbl zonder enige publieke financiering, voor een rechtvaardigere en transparantere samenleving."
+      organization: "BoringLess",
+      description: "Deze webapplicatie is ontwikkeld door BoringLess zonder enige publieke financiering, voor een rechtvaardigere en transparantere samenleving."
     }
   },
   en: {
@@ -202,7 +204,7 @@ const content: Record<Language, HelpContent> = {
       title: "Source",
       description: "All data comes from the official Open Data Brussels platform, managed by the City of Brussels. Data is updated every year and covers the period from 2019 to 2024.",
       source: "Open Data Brussels",
-      link: "https://opendata.brussels.be"
+      link: "https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score"
     },
     howToUse: {
       title: "Usage",
@@ -242,8 +244,8 @@ const content: Record<Language, HelpContent> = {
     },
     credits: {
       title: "About",
-      organization: "Piknik Elektronik Asbl",
-      description: "This web application was developed by Piknik Elektronik Asbl with no public funding, for a fairer and more transparent society."
+      organization: "BoringLess",
+      description: "This web application was developed by BoringLess with no public funding, for a fairer and more transparent society."
     }
   },
   de: {
@@ -268,7 +270,7 @@ const content: Record<Language, HelpContent> = {
       title: "Quelle",
       description: "Alle Daten stammen von der offiziellen Open Data Brussels-Plattform, verwaltet von der Stadt Brüssel. Die Daten werden jährlich aktualisiert und umfassen den Zeitraum von 2019 bis 2024.",
       source: "Open Data Brussels",
-      link: "https://opendata.brussels.be"
+      link: "https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score"
     },
     howToUse: {
       title: "Nutzung",
@@ -308,8 +310,8 @@ const content: Record<Language, HelpContent> = {
     },
     credits: {
       title: "Über",
-      organization: "Piknik Elektronik Asbl",
-      description: "Diese Webanwendung wurde von Piknik Elektronik Asbl ohne öffentliche Finanzierung entwickelt, für eine gerechtere und transparentere Gesellschaft."
+      organization: "BoringLess",
+      description: "Diese Webanwendung wurde von BoringLess ohne öffentliche Finanzierung entwickelt, für eine gerechtere und transparentere Gesellschaft."
     }
   }
 }
@@ -331,6 +333,7 @@ const getIcon = (iconName: string) => {
 
 export default function AidePage() {
   const [language, setLanguage] = useState<Language>("fr")
+  const [subsides, setSubsides] = useState<Subside[]>([])
   
   // Charger la langue sauvegardée au montage
   useEffect(() => {
@@ -345,14 +348,72 @@ export default function AidePage() {
     localStorage.setItem("help-language", language)
   }, [language])
   
+  // Fonction pour charger les données
+  const loadData = useCallback(async () => {
+    // Vérifier le cache en premier
+    const cachedData = getCachedData("all")
+    if (cachedData) {
+      setSubsides(cachedData)
+      return
+    }
+
+    // Si pas de cache, charger depuis les fichiers JSON
+    try {
+      const availableYears = ["2024", "2023", "2022", "2021", "2020", "2019"]
+      
+      const yearPromises = availableYears.map(async (year) => {
+        try {
+          const jsonData = await fetch(`/data-${year}.json`)
+          if (!jsonData.ok) {
+            return null
+          }
+          const rawData: unknown[] = await jsonData.json()
+          if (rawData && rawData.length > 0) {
+            const normalizedData = normalizeSubsidesArray(rawData, year)
+            return normalizedData
+          }
+          return null
+        } catch {
+          return null
+        }
+      })
+      
+      const results = await Promise.all(yearPromises)
+      const allData = results.filter((data): data is Subside[] => data !== null).flat()
+      
+      if (allData.length > 0) {
+        setSubsides(allData)
+        // Mettre en cache pour la prochaine fois
+        setCachedData(allData, "all")
+      }
+    } catch (error) {
+      console.warn("Erreur lors du chargement des données:", error)
+    }
+  }, [])
+
+  // Charger les données au montage
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+  
+  // Calculer les totaux pour les stats
+  const totalAmount = useMemo(() => {
+    return subsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
+  }, [subsides])
+  
+  const totalSubsides = subsides.length
+  
   const currentContent = content[language]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-3 sm:p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         <AppHeader
+          totalAmount={totalAmount}
+          totalSubsides={totalSubsides}
+          selectedYear="all"
           currentPage="aide"
-          showStats={false}
+          showStats={true}
           showNavigation={true}
         />
         
@@ -360,18 +421,15 @@ export default function AidePage() {
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-3 sm:p-4 md:p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-2">
             <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-              <Link href="/">
-                <Button variant="outline" size="sm" className="flex items-center gap-2 min-h-[44px] sm:min-h-0 flex-shrink-0">
-                  <ArrowLeft className="w-4 h-4" />
-                  <span className="hidden sm:inline">{currentContent.backButton}</span>
-                </Button>
-              </Link>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent truncate">
                 {currentContent.title}
               </h1>
             </div>
             <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-              <SelectTrigger className="w-full sm:w-[140px] md:w-[160px] min-h-[44px] sm:min-h-0">
+              <SelectTrigger 
+                className="w-full sm:w-[140px] md:w-[160px] min-h-[44px] sm:min-h-0"
+                aria-label="Sélectionner la langue"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -488,16 +546,9 @@ export default function AidePage() {
             </AccordionTrigger>
             <AccordionContent className="pb-3 sm:pb-4 md:pb-6 space-y-3">
               <div className="flex items-center gap-2">
-                <a
-                  href="http://piknikelektronik.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block hover:opacity-80 transition-opacity min-h-[44px] sm:min-h-0 flex items-center"
-                >
-                  <Badge className="bg-green-600 text-white border-0 px-3 py-1.5 sm:py-1 font-semibold cursor-pointer hover:bg-green-700 transition-colors text-xs sm:text-sm">
-                    {currentContent.credits.organization}
-                  </Badge>
-                </a>
+                <Badge className="bg-green-600 text-white border-0 px-3 py-1.5 sm:py-1 font-semibold text-xs sm:text-sm">
+                  {currentContent.credits.organization}
+                </Badge>
               </div>
               <p className="text-gray-800 text-sm sm:text-base leading-relaxed font-medium">
                 {currentContent.credits.description}
@@ -506,15 +557,8 @@ export default function AidePage() {
           </AccordionItem>
         </Accordion>
 
-        {/* Footer */}
-        <div className="text-center text-xs sm:text-sm text-gray-500 py-3 sm:py-4 px-2">
-          <p>
-            {language === "fr" && "Application de transparence des finances publiques"}
-            {language === "nl" && "Toepassing voor transparantie van publieke financiën"}
-            {language === "en" && "Public finance transparency tool"}
-            {language === "de" && "Anwendung für Transparenz öffentlicher Finanzen"}
-          </p>
-        </div>
+        {/* Footer avec compteur de visite et radars */}
+        <AppFooter />
       </div>
     </div>
   )

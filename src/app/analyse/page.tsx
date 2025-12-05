@@ -4,6 +4,7 @@ import { CustomTooltip } from "@/components/CustomTooltip"
 import { NivoBarChart } from "@/components/NivoBarChart"
 import { Top10PieChart } from "@/components/Top10PieChart"
 import { Top10ListChart } from "@/components/Top10ListChart"
+import { PieChartLegend } from "@/components/PieChartLegend"
 import { ChartSkeleton } from "@/components/ChartSkeleton"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, RefreshCw, PieChart as PieChartIcon } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
+import { AppFooter } from "@/components/AppFooter"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
@@ -22,6 +24,7 @@ import { groupBeneficiaries, normalizeBeneficiaryName as normalizeBeneficiaryNam
 import { useResponsiveChart } from '@/lib/use-responsive-chart'
 import { categorizeSubside } from '@/lib/category-config'
 import { createFilterPreset, loadFilterPreset } from '@/lib/filter-presets'
+import { devLog, devWarn, devError } from '@/lib/utils'
 
 const COLORS = [
   "#3B82F6", // Bleu vif
@@ -83,8 +86,6 @@ function getBeneficiaryType(name: string, cache: Map<string, string>): string {
 
 
 
-// Fonction pour générer l'URL de recherche avec filtres pour un secteur
-
 export default function AnalysePage() {
   const [subsides, setSubsides] = useState<Subside[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,7 +119,7 @@ export default function AnalysePage() {
     
     // Debounce: ignorer les clics trop rapides
     if (now - lastClickTime.current < CLICK_DEBOUNCE_MS) {
-      console.log('[Analyse] Click ignored (debounce)')
+      devLog('[Analyse] Click ignored (debounce)')
       return
     }
     lastClickTime.current = now
@@ -128,7 +129,7 @@ export default function AnalysePage() {
       
       // Vérifier que le nom n'est pas trop long (sécurité)
       if (typeof beneficiaryName !== 'string' || beneficiaryName.length > 10000) {
-        console.warn('[Analyse] Beneficiary name too long, skipping preset creation')
+        devWarn('[Analyse] Beneficiary name too long, skipping preset creation')
         return
       }
       
@@ -143,7 +144,7 @@ export default function AnalysePage() {
       )
       
       if (!filterId) {
-        console.warn('[Analyse] Failed to create filter preset, cannot redirect')
+        devWarn('[Analyse] Failed to create filter preset, cannot redirect')
         return
       }
       
@@ -151,11 +152,11 @@ export default function AnalysePage() {
       // Note: loadFilterPreset vérifie aussi l'expiration
       const verifyPreset = loadFilterPreset(filterId)
       if (!verifyPreset) {
-        console.error('[Analyse] Preset created but not found, aborting redirect')
+        devError('[Analyse] Preset created but not found, aborting redirect')
         return
       }
       
-      console.log(`[Analyse] Created filter preset ${filterId} for beneficiary: ${beneficiaryName.substring(0, 50)}...`)
+      devLog(`[Analyse] Created filter preset ${filterId} for beneficiary: ${beneficiaryName.substring(0, 50)}...`)
       
       // Construire l'URL de redirection
       // Utiliser window.location.origin pour éviter les problèmes de base path
@@ -170,19 +171,19 @@ export default function AnalysePage() {
         }
         
         // Rediriger vers la page de recherche avec le preset
-        console.log(`[Analyse] Redirecting to: ${searchUrl.href}`)
+        devLog(`[Analyse] Redirecting to: ${searchUrl.href}`)
         window.location.href = searchUrl.href
       } catch (urlError) {
-        console.error('[Analyse] Error constructing redirect URL:', urlError)
+        devError('[Analyse] Error constructing redirect URL:', urlError)
         // Fallback: essayer avec une URL simple
         try {
           window.location.href = `/?filter=${filterId}`
         } catch (fallbackError) {
-          console.error('[Analyse] Fallback redirect also failed:', fallbackError)
+          devError('[Analyse] Fallback redirect also failed:', fallbackError)
         }
       }
     } catch (error) {
-      console.error('[Analyse] Error handling bar click:', error)
+      devError('[Analyse] Error handling bar click:', error)
     }
   }, [selectedDataYear])
 
@@ -206,7 +207,7 @@ export default function AnalysePage() {
       
       return years
     } catch (error) {
-      console.error("Erreur lors de la détection des années:", error)
+      devError("Erreur lors de la détection des années:", error)
       return ["all", "2024", "2023", "2022", "2021", "2020", "2019"]
     }
   }, [])
@@ -280,7 +281,7 @@ export default function AnalysePage() {
       setCachedData(allData, dataYear)
       
     } catch (apiError) {
-      console.error("❌ Erreur chargement JSON:", apiError)
+      devError("❌ Erreur chargement JSON:", apiError)
       setError(`Erreur lors du chargement des données: ${apiError instanceof Error ? apiError.message : String(apiError)}`)
     } finally {
       setLoading(false)
@@ -296,7 +297,8 @@ export default function AnalysePage() {
     }
     
     loadData(selectedDataYear)
-  }, [loadData, selectedDataYear])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDataYear]) // loadData est stable grâce à useCallback, on utilise seulement selectedDataYear
 
 
 
@@ -710,82 +712,111 @@ export default function AnalysePage() {
             {loading ? (
               <ChartSkeleton height={500} />
             ) : (
-              <Card className="bg-white/80 backdrop-blur-sm border border-gray-100 shadow-sm">
-                <CardHeader className="border-b border-gray-100 px-4 sm:px-6 py-3 sm:py-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-base sm:text-lg font-semibold text-gray-800 leading-tight">
-                        Top 10 Bénéficiaires Globaux
-                        {topGlobalBeneficiaries.length > 10 && (
-                          <span className="text-xs sm:text-sm font-normal text-gray-500 ml-1.5">
-                            (Top 10 + {topGlobalBeneficiaries.length - 10} autres)
-                          </span>
-                        )}
-                      </CardTitle>
-                      <CardDescription className="text-xs sm:text-sm text-gray-500 mt-1.5 leading-relaxed">
-                        Les bénéficiaires qui reçoivent le plus (toutes catégories confondues)
-                        {topGlobalBeneficiaries.length > 10 && ' • Affichage optimisé : Top 10 + regroupement des autres'}
-                      </CardDescription>
+              <>
+                <Card className="bg-white/80 backdrop-blur-sm border border-gray-100 shadow-sm">
+                  <CardHeader className="border-b border-gray-100 px-4 sm:px-6 py-3 sm:py-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base sm:text-lg font-semibold text-gray-800 leading-tight">
+                          Top 10 Bénéficiaires Globaux
+                          {topGlobalBeneficiaries.length > 10 && (
+                            <span className="text-xs sm:text-sm font-normal text-gray-500 ml-1.5">
+                              (Top 10 + {topGlobalBeneficiaries.length - 10} autres)
+                            </span>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="text-xs sm:text-sm text-gray-500 mt-1.5 leading-relaxed">
+                          Les bénéficiaires qui reçoivent le plus (toutes catégories confondues)
+                          {topGlobalBeneficiaries.length > 10 && ' • Affichage optimisé : Top 10 + regroupement des autres'}
+                        </CardDescription>
+                      </div>
+                      {/* Sélecteur de type de graphique */}
+                      <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
+                        <Button
+                          variant={top10ChartType === 'pie' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setTop10ChartType('pie')}
+                          className="h-8 px-2.5 sm:px-3 text-xs font-medium"
+                        >
+                          <PieChartIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                          <span className="hidden sm:inline">Camembert</span>
+                          <span className="sm:hidden">Pie</span>
+                        </Button>
+                        <Button
+                          variant={top10ChartType === 'list' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setTop10ChartType('list')}
+                          className="h-8 px-2.5 sm:px-3 text-xs font-medium"
+                        >
+                          Liste
+                        </Button>
+                        <Button
+                          variant={top10ChartType === 'bar' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setTop10ChartType('bar')}
+                          className="h-8 px-2.5 sm:px-3 text-xs font-medium"
+                        >
+                          Barres
+                        </Button>
+                      </div>
                     </div>
-                    {/* Sélecteur de type de graphique */}
-                    <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
-                      <Button
-                        variant={top10ChartType === 'pie' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setTop10ChartType('pie')}
-                        className="h-8 px-2.5 sm:px-3 text-xs font-medium"
-                      >
-                        <PieChartIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                        <span className="hidden sm:inline">Camembert</span>
-                        <span className="sm:hidden">Pie</span>
-                      </Button>
-                      <Button
-                        variant={top10ChartType === 'list' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setTop10ChartType('list')}
-                        className="h-8 px-2.5 sm:px-3 text-xs font-medium"
-                      >
-                        Liste
-                      </Button>
-                      <Button
-                        variant={top10ChartType === 'bar' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setTop10ChartType('bar')}
-                        className="h-8 px-2.5 sm:px-3 text-xs font-medium"
-                      >
-                        Barres
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6">
-                  {top10ChartType === 'pie' && (
-                    <div className="space-y-4">
-                      <Top10PieChart
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    {top10ChartType === 'pie' && (
+                      <div className="space-y-4">
+                        <Top10PieChart
+                          data={chartData}
+                          colors={COLORS}
+                          onSliceClick={handleBarClick}
+                        />
+                      </div>
+                    )}
+                    {top10ChartType === 'list' && (
+                      <Top10ListChart
                         data={chartData}
                         colors={COLORS}
-                        onSliceClick={handleBarClick}
+                        onItemClick={handleBarClick}
                       />
-                    </div>
-                  )}
-                  {top10ChartType === 'list' && (
-                    <Top10ListChart
-                      data={chartData}
-                      colors={COLORS}
-                      onItemClick={handleBarClick}
-                    />
-                  )}
-                  {top10ChartType === 'bar' && (
-                    <NivoBarChart 
-                      data={chartData} 
-                      colors={COLORS}
-                      padding={0.5}
-                      leftMargin={250}
-                      onBarClick={handleBarClick}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+                    )}
+                    {top10ChartType === 'bar' && (
+                      <NivoBarChart 
+                        data={chartData} 
+                        colors={COLORS}
+                        padding={0.5}
+                        leftMargin={250}
+                        onBarClick={handleBarClick}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+                {/* Légende séparée pour le camembert */}
+                {top10ChartType === 'pie' && !loading && (
+                  <Card className="bg-white/80 backdrop-blur-sm border border-gray-100 shadow-sm mt-4">
+                    <CardHeader className="border-b border-gray-100 px-4 sm:px-6 py-3 sm:py-4">
+                      <CardTitle className="text-base sm:text-lg font-semibold text-gray-800 leading-tight">
+                        Légende
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <PieChartLegend
+                        data={chartData.map((item, index) => ({
+                          name: item.name,
+                          color: COLORS[index % COLORS.length],
+                          rank: item.rank,
+                          totalAmount: item.totalAmount,
+                        }))}
+                        onItemClick={(item) => {
+                          handleBarClick({
+                            name: item.name,
+                            value: item.totalAmount,
+                            rank: item.rank,
+                          })
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
 
           </TabsContent>
@@ -1193,6 +1224,9 @@ export default function AnalysePage() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {/* Footer avec compteur de visite et radars */}
+      <AppFooter />
     </div>
   )
 }

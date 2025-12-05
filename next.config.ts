@@ -3,6 +3,50 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Headers pour gérer CSP
+  async headers() {
+    // En développement, CSP plus permissive pour permettre le hot reload de Next.js
+    // et les bibliothèques qui utilisent eval() (comme certaines libs de graphiques)
+    const cspValue = process.env.NODE_ENV === 'development'
+      ? [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.sentry.io",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data: https: blob:",
+          "font-src 'self' data:",
+          "connect-src 'self' https://*.sentry.io https://opendata.brussels.be",
+          "frame-src 'none'",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+          "frame-ancestors 'none'",
+        ].join('; ')
+      : [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' https://*.sentry.io",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data: https: blob:",
+          "font-src 'self' data:",
+          "connect-src 'self' https://*.sentry.io https://opendata.brussels.be",
+          "frame-src 'none'",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'",
+          "frame-ancestors 'none'",
+        ].join('; ');
+
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: cspValue,
+          },
+        ],
+      },
+    ];
+  },
 };
 
 // Make sure adding Sentry options is the last code to run before exporting

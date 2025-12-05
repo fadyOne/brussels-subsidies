@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Building, Download, FileText, RefreshCw, Search, Share2 } from "lucide-react"
+import { AlertCircle, Building, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Share2 } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
+import { AppFooter } from "@/components/AppFooter"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { Subside } from '@/lib/types'
@@ -23,7 +24,88 @@ import { normalizeSubsidesArray } from '@/lib/data-normalizer'
 import { exportData, type ExportColumn, DEFAULT_COLUMNS, COLUMN_LABELS } from '@/lib/data-exporter'
 import { getCachedData, setCachedData } from '@/lib/cache'
 import { categorizeSubside } from '@/lib/category-config'
-import { loadFilterPreset, generateHash, normalizeForHash, createFilterPreset } from '@/lib/filter-presets'
+import { loadFilterPreset, generateHash, normalizeForHash } from '@/lib/filter-presets'
+import { devLog, devWarn, devError, formatNumberWithSpaces } from '@/lib/utils'
+
+// Fonction pour obtenir le schéma de couleurs selon l'année (hors composant pour performance)
+const getYearColorScheme = (year: string) => {
+  // Palette de couleurs harmonieuses en tons pastels
+  const colorSchemes: Record<string, {
+    border: string
+    hoverBorder: string
+    hoverBg: string
+    text: string
+    bgFrom: string
+    bgTo: string
+    bgColor: string
+  }> = {
+    '2019': {
+      border: 'border-violet-100',
+      hoverBorder: 'hover:border-violet-300',
+      hoverBg: 'hover:bg-violet-50/50',
+      text: 'text-violet-700',
+      bgFrom: 'from-violet-50',
+      bgTo: 'to-violet-100',
+      bgColor: 'bg-violet-100'
+    },
+    '2020': {
+      border: 'border-pink-100',
+      hoverBorder: 'hover:border-pink-300',
+      hoverBg: 'hover:bg-pink-50/50',
+      text: 'text-pink-700',
+      bgFrom: 'from-pink-50',
+      bgTo: 'to-pink-100',
+      bgColor: 'bg-pink-100'
+    },
+    '2021': {
+      border: 'border-orange-100',
+      hoverBorder: 'hover:border-orange-300',
+      hoverBg: 'hover:bg-orange-50/50',
+      text: 'text-orange-700',
+      bgFrom: 'from-orange-50',
+      bgTo: 'to-orange-100',
+      bgColor: 'bg-orange-100'
+    },
+    '2022': {
+      border: 'border-amber-100',
+      hoverBorder: 'hover:border-amber-300',
+      hoverBg: 'hover:bg-amber-50/50',
+      text: 'text-amber-700',
+      bgFrom: 'from-amber-50',
+      bgTo: 'to-amber-100',
+      bgColor: 'bg-amber-100'
+    },
+    '2023': {
+      border: 'border-green-100',
+      hoverBorder: 'hover:border-green-300',
+      hoverBg: 'hover:bg-green-50/50',
+      text: 'text-green-700',
+      bgFrom: 'from-green-50',
+      bgTo: 'to-green-100',
+      bgColor: 'bg-green-100'
+    },
+    '2024': {
+      border: 'border-blue-100',
+      hoverBorder: 'hover:border-blue-300',
+      hoverBg: 'hover:bg-blue-50/50',
+      text: 'text-blue-900',
+      bgFrom: 'from-blue-50',
+      bgTo: 'to-blue-100',
+      bgColor: 'bg-blue-100'
+    }
+  }
+
+  // Retourner le schéma pour l'année ou un schéma par défaut (gris neutre)
+  return colorSchemes[year] || {
+    border: 'border-gray-100',
+    hoverBorder: 'hover:border-gray-300',
+    hoverBg: 'hover:bg-gray-50/50',
+    text: 'text-gray-700',
+    bgFrom: 'from-gray-50',
+    bgTo: 'to-gray-100',
+    bgColor: 'bg-gray-100'
+  }
+}
 
 export default function SubsidesDashboard() {
   const [subsides, setSubsides] = useState<Subside[]>([])
@@ -33,10 +115,11 @@ export default function SubsidesDashboard() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedDataYear, setSelectedDataYear] = useState<string>("all")
   // Filtre de catégorie retiré - toujours "toutes les catégories" pour éviter les faux filtres
-  const [selectedCommune, setSelectedCommune] = useState<string>("all")
+  const [selectedCommune] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 40 // Augmenté pour afficher plus de résultats avec le design compact
   const [showCopyNotification, setShowCopyNotification] = useState(false)
+  const [errorNotification, setErrorNotification] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [selectedColumns, setSelectedColumns] = useState<ExportColumn[]>(DEFAULT_COLUMNS)
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -56,17 +139,17 @@ export default function SubsidesDashboard() {
           const response = await fetch(`/data-${year}.json`, { method: 'HEAD' })
           if (response.ok) {
             years.push(year)
-            console.log(` Fichier data-${year}.json trouvé`)
+            devLog(` Fichier data-${year}.json trouvé`)
           }
         } catch {
           // Fichier n'existe pas, continuer silencieusement
         }
       }
       
-      console.log(`📅 ${years.length - 1} années de données détectées:`, years.slice(1))
+      devLog(`📅 ${years.length - 1} années de données détectées:`, years.slice(1))
       return years
     } catch (error) {
-      console.error("Erreur lors de la détection des années:", error)
+      devError("Erreur lors de la détection des années:", error)
       // Fallback vers les années connues
       return ["all", "2024", "2023", "2022", "2021", "2020", "2019"]
     }
@@ -77,15 +160,6 @@ export default function SubsidesDashboard() {
 
 
 
-  // État pour le modal des informations bénéficiaire (supprimé - non utilisé)
-  // const [selectedBeneficiary, setSelectedBeneficiary] = useState<string | null>(null)
-  // const [beneficiaryInfo, setBeneficiaryInfo] = useState<{
-  //   name: string
-  //   subsides: Subside[]
-  //   totalAmount: number
-  //   years: string[]
-  //   bceNumber: string | null
-  // } | null>(null)
 
   // Détecter les années disponibles au chargement initial
   useEffect(() => {
@@ -106,7 +180,7 @@ export default function SubsidesDashboard() {
               // Hash-based preset: need to find matching beneficiary by hash
               const targetHash = presetFilters._hash as string
               
-              console.log(`[Page] Hash-based preset detected, searching for hash: ${targetHash}`)
+              devLog(`[Page] Hash-based preset detected, searching for hash: ${targetHash}`)
               
               // We'll need to search through subsides to find matching hash
               // For now, we'll set a flag and search after data loads
@@ -129,7 +203,7 @@ export default function SubsidesDashboard() {
               newUrl.searchParams.delete('filter')
               window.history.replaceState({}, '', newUrl.toString())
               
-              console.log(`[Page] Hash-based preset loaded, will search for matching beneficiary`)
+              devLog(`[Page] Hash-based preset loaded, will search for matching beneficiary`)
             } else {
               // Normal preset: apply filters directly
               if (presetFilters.search) {
@@ -147,7 +221,7 @@ export default function SubsidesDashboard() {
               newUrl.searchParams.delete('filter')
               window.history.replaceState({}, '', newUrl.toString())
               
-              console.log(`[Page] Loaded filter preset ${filterId}`)
+              devLog(`[Page] Loaded filter preset ${filterId}`)
             }
           } else {
             // Preset not found or expired - clean up URL
@@ -155,7 +229,7 @@ export default function SubsidesDashboard() {
             newUrl.searchParams.delete('filter')
             window.history.replaceState({}, '', newUrl.toString())
             
-            console.warn(`[Page] Filter preset ${filterId} not found or expired`)
+            devWarn(`[Page] Filter preset ${filterId} not found or expired`)
           }
         } else {
           // No preset, load direct URL params (backward compatibility)
@@ -169,22 +243,28 @@ export default function SubsidesDashboard() {
       
       const detectedYears = await getAvailableYears()
       setAvailableDataYears(detectedYears)
-      console.log("📅 Années détectées:", detectedYears)
+      devLog("📅 Années détectées:", detectedYears)
     }
     detectYears()
   }, [getAvailableYears, presetLoaded])
 
 
 
+  // Fonction pour afficher une notification d'erreur
+  const showErrorNotification = useCallback((message: string) => {
+    setErrorNotification(message)
+    setTimeout(() => setErrorNotification(null), 5000) // Auto-dismiss après 5 secondes
+  }, [])
+
   // Fonction pour exporter les données
   const handleExport = useCallback((format: 'csv' | 'excel' | 'json' | 'pdf') => {
     if (filteredSubsides.length === 0) {
-      alert('Aucune donnée à exporter')
+      showErrorNotification('Aucune donnée à exporter')
       return
     }
 
     if (selectedColumns.length === 0) {
-      alert('Veuillez sélectionner au moins une colonne à exporter')
+      showErrorNotification('Veuillez sélectionner au moins une colonne à exporter')
       return
     }
 
@@ -206,12 +286,12 @@ export default function SubsidesDashboard() {
       })
       setShowExportDialog(false)
     } catch (error) {
-      console.error('Erreur lors de l\'export:', error)
-      alert(`Erreur lors de l'export ${format.toUpperCase()}. Veuillez réessayer.`)
+      devError('Erreur lors de l\'export:', error)
+      showErrorNotification(`Erreur lors de l'export ${format.toUpperCase()}. Veuillez réessayer.`)
     } finally {
       setIsExporting(false)
     }
-  }, [filteredSubsides, selectedDataYear, searchTerm, selectedColumns])
+  }, [filteredSubsides, selectedDataYear, searchTerm, selectedColumns, showErrorNotification])
 
   // Fonction pour gérer la sélection de colonnes
   const handleColumnToggle = useCallback((column: ExportColumn) => {
@@ -229,39 +309,31 @@ export default function SubsidesDashboard() {
 
   // Fonction pour sélectionner/désélectionner toutes les colonnes
   const handleSelectAllColumns = useCallback(() => {
-    if (selectedColumns.length === DEFAULT_COLUMNS.length) {
-      // Désélectionner toutes sauf la première
-      setSelectedColumns([DEFAULT_COLUMNS[0]])
-    } else {
-      // Sélectionner toutes
-      setSelectedColumns([...DEFAULT_COLUMNS])
-    }
-  }, [selectedColumns])
+    setSelectedColumns((prev) => {
+      // Utiliser la fonction de mise à jour pour éviter la dépendance sur selectedColumns
+      if (prev.length === DEFAULT_COLUMNS.length) {
+        // Désélectionner toutes sauf la première
+        return [DEFAULT_COLUMNS[0]]
+      } else {
+        // Sélectionner toutes
+        return [...DEFAULT_COLUMNS]
+      }
+    })
+  }, []) // Plus besoin de selectedColumns dans les dépendances
 
 
-  // Fonction pour générer les liens externes (supprimée - non utilisée)
-  // const getExternalLinks = (beneficiaryName: string, bceNumber: string | null) => {
-  //   const encodedName = encodeURIComponent(beneficiaryName)
-  //   return {
-  //     kbo: bceNumber ? 
-  //       `https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html?nummer=${bceNumber}` :
-  //       `https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html`,
-  //     northData: `https://www.northdata.com/${encodedName}`,
-  //     google: `https://www.google.com/search?q=${encodedName}+Bruxelles+ASBL`
-  //   }
-  // }
 
   // Charger les données depuis le fichier JSON
   const loadData = useCallback(async (dataYear: string = selectedDataYear) => {
     try {
-      console.log('🚀 Début du chargement des données pour:', dataYear)
+      devLog('🚀 Début du chargement des données pour:', dataYear)
       setLoading(true)
       setError(null)
 
       // ✅ Vérifier le cache en premier (amélioration 2)
       const cachedData = getCachedData(dataYear)
       if (cachedData) {
-        console.log('✅ Données récupérées depuis le cache')
+        devLog('✅ Données récupérées depuis le cache')
         setSubsides(cachedData)
         setFilteredSubsides(cachedData)
         setLoading(false)
@@ -271,7 +343,7 @@ export default function SubsidesDashboard() {
       let allData: Subside[] = []
 
       if (dataYear === "all") {
-        console.log("🔄 Chargement de toutes les années de données...")
+        devLog("🔄 Chargement de toutes les années de données...")
         
         // Détecter automatiquement les années disponibles
         const detectedYears = await getAvailableYears()
@@ -283,11 +355,11 @@ export default function SubsidesDashboard() {
         // ✅ Chargement parallèle au lieu de séquentiel
         const yearPromises = years.map(async (year) => {
           try {
-            console.log(`📁 Chargement des données ${year}...`)
+            devLog(`📁 Chargement des données ${year}...`)
             const jsonData = await fetch(`/data-${year}.json`)
             
             if (!jsonData.ok) {
-              console.warn(`⚠️ Impossible de charger les données ${year}`)
+              devWarn(`⚠️ Impossible de charger les données ${year}`)
               return null
             }
             
@@ -300,7 +372,7 @@ export default function SubsidesDashboard() {
             }
             return null
           } catch (yearError) {
-            console.warn(`⚠️ Erreur lors du chargement de ${year}:`, yearError)
+            devWarn(`⚠️ Erreur lors du chargement de ${year}:`, yearError)
             return null
           }
         })
@@ -313,14 +385,14 @@ export default function SubsidesDashboard() {
           throw new Error("Aucune donnée récupérée pour toutes les années")
         }
         
-        console.log(`Total: ${allData.length} subsides de toutes les années chargés avec succès`)
+        devLog(`Total: ${allData.length} subsides de toutes les années chargés avec succès`)
       } else {
-        console.log(`🔄 Chargement des données ${dataYear} depuis le fichier JSON...`)
+        devLog(`🔄 Chargement des données ${dataYear} depuis le fichier JSON...`)
         const jsonData = await fetch(`/data-${dataYear}.json`)
         
       if (!jsonData.ok) {
         const errorText = await jsonData.text()
-        console.error("Erreur de récupération:", jsonData.status, errorText)
+        devError("Erreur de récupération:", jsonData.status, errorText)
         throw new Error(`HTTP error! status: ${jsonData.status} - ${errorText}`)
       }
         
@@ -330,7 +402,7 @@ export default function SubsidesDashboard() {
           // ✅ Utilisation du normalizer centralisé pour éviter la duplication
           const normalizedData = normalizeSubsidesArray(rawData, dataYear)
           allData = normalizedData
-          console.log(`${normalizedData.length} subsides ${dataYear} chargés avec succès`)
+          devLog(`${normalizedData.length} subsides ${dataYear} chargés avec succès`)
       } else {
           throw new Error(`Aucune donnée récupérée depuis le fichier data-${dataYear}.json`)
       }
@@ -344,17 +416,18 @@ export default function SubsidesDashboard() {
       setCachedData(allData, dataYear)
       
     } catch (apiError) {
-      console.error("❌ Erreur chargement JSON:", apiError)
+      devError("❌ Erreur chargement JSON:", apiError)
       setError(`Erreur lors du chargement des données: ${apiError instanceof Error ? apiError.message : String(apiError)}`)
     } finally {
-      console.log('🏁 Fin du chargement, setLoading(false)')
+      devLog('🏁 Fin du chargement, setLoading(false)')
       setLoading(false)
     }
   }, [selectedDataYear, getAvailableYears])
 
   useEffect(() => {
     loadData(selectedDataYear)
-  }, [loadData, selectedDataYear]) // ✅ Retirer loadData de la dépendance
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDataYear]) // loadData est stable grâce à useCallback, on utilise seulement selectedDataYear
 
   // Filtrage des données avec debounce pour optimiser la recherche
   useEffect(() => {
@@ -365,7 +438,7 @@ export default function SubsidesDashboard() {
     if (searchTerm.startsWith('__HASH_SEARCH__:')) {
       const targetHash = searchTerm.substring('__HASH_SEARCH__:'.length)
       
-      console.log(`[Page] Hash search mode, looking for hash: ${targetHash}`)
+      devLog(`[Page] Hash search mode, looking for hash: ${targetHash}`)
       
       // Search through subsides to find beneficiary with matching hash
       filtered = subsides.filter((subside) => {
@@ -375,9 +448,9 @@ export default function SubsidesDashboard() {
       })
       
       if (filtered.length > 0) {
-        console.log(`[Page] Found ${filtered.length} matches for hash ${targetHash}`)
+        devLog(`[Page] Found ${filtered.length} matches for hash ${targetHash}`)
       } else {
-        console.warn(`[Page] No matches found for hash ${targetHash}`)
+        devWarn(`[Page] No matches found for hash ${targetHash}`)
       }
     } else if (searchTerm) {
         // Normal search
@@ -434,10 +507,15 @@ export default function SubsidesDashboard() {
     return () => clearTimeout(timeoutId)
   }, [subsides, searchTerm, selectedCommune])
 
-  // Pagination
-  const totalPages = Math.ceil(filteredSubsides.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedSubsides = filteredSubsides.slice(startIndex, startIndex + itemsPerPage)
+  // Pagination - mémorisé pour éviter les recalculs
+  const paginationData = useMemo(() => {
+    const totalPages = Math.ceil(filteredSubsides.length / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const paginatedSubsides = filteredSubsides.slice(startIndex, startIndex + itemsPerPage)
+    return { totalPages, startIndex, paginatedSubsides }
+  }, [filteredSubsides, currentPage, itemsPerPage])
+  
+  const { totalPages, paginatedSubsides } = paginationData
 
 
   // Calcul des totaux avec useMemo pour s'assurer qu'ils sont recalculés
@@ -448,29 +526,9 @@ export default function SubsidesDashboard() {
     return dataToUse.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
   }, [filteredSubsides, subsides])
 
-  // Calcul de la plage d'années dynamique (conservé pour usage futur)
-  // Calcul de la plage d'années dynamique (conservé pour usage futur)
-  // const yearRange = useMemo(() => {
-  //   const dataToUse = filteredSubsides.length > 0 ? filteredSubsides : subsides
-  //   if (dataToUse.length === 0) return ""
-  //   const years = dataToUse.map(s => s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend)
-  //     .filter(year => year && year !== "Non spécifié")
-  //     .map(year => parseInt(year))
-  //     .filter(year => !isNaN(year))
-  //     .sort((a, b) => a - b)
-  //   if (years.length === 0) return ""
-  //   const minYear = Math.min(...years)
-  //   const maxYear = Math.max(...years)
-  //   if (minYear === maxYear) {
-  //     return `(${minYear})`
-  //   } else {
-  //     return `(${minYear}-${maxYear})`
-  //   }
-  // }, [filteredSubsides, subsides])
 
-  const totalSubsides = useMemo(() => {
-    return filteredSubsides.length
-  }, [filteredSubsides])
+  // totalSubsides est une simple propriété, pas besoin de useMemo
+  const totalSubsides = filteredSubsides.length
 
   // Données pour le mini-graphique d'évolution par année
   const evolutionData = useMemo(() => {
@@ -489,104 +547,7 @@ export default function SubsidesDashboard() {
       .sort((a, b) => a.year.localeCompare(b.year))
       .slice(-6) // Garder les 6 dernières années max pour le mini-graphique
   }, [filteredSubsides])
-  
-  // Calcul dynamique des catégories uniques retiré - filtre de catégorie supprimé
 
-  // Fonction pour obtenir le schéma de couleurs selon l'année
-  const getYearColorScheme = useCallback((year: string) => {
-    // Palette de couleurs harmonieuses en tons pastels
-    const colorSchemes: Record<string, {
-      border: string
-      hoverBorder: string
-      hoverBg: string
-      text: string
-      bgFrom: string
-      bgTo: string
-      bgColor: string
-    }> = {
-      '2019': {
-        border: 'border-violet-100',
-        hoverBorder: 'hover:border-violet-300',
-        hoverBg: 'hover:bg-violet-50/50',
-        text: 'text-violet-700',
-        bgFrom: 'from-violet-50',
-        bgTo: 'to-violet-100',
-        bgColor: 'bg-violet-100'
-      },
-      '2020': {
-        border: 'border-pink-100',
-        hoverBorder: 'hover:border-pink-300',
-        hoverBg: 'hover:bg-pink-50/50',
-        text: 'text-pink-700',
-        bgFrom: 'from-pink-50',
-        bgTo: 'to-pink-100',
-        bgColor: 'bg-pink-100'
-      },
-      '2021': {
-        border: 'border-orange-100',
-        hoverBorder: 'hover:border-orange-300',
-        hoverBg: 'hover:bg-orange-50/50',
-        text: 'text-orange-700',
-        bgFrom: 'from-orange-50',
-        bgTo: 'to-orange-100',
-        bgColor: 'bg-orange-100'
-      },
-      '2022': {
-        border: 'border-amber-100',
-        hoverBorder: 'hover:border-amber-300',
-        hoverBg: 'hover:bg-amber-50/50',
-        text: 'text-amber-700',
-        bgFrom: 'from-amber-50',
-        bgTo: 'to-amber-100',
-        bgColor: 'bg-amber-100'
-      },
-      '2023': {
-        border: 'border-green-100',
-        hoverBorder: 'hover:border-green-300',
-        hoverBg: 'hover:bg-green-50/50',
-        text: 'text-green-700',
-        bgFrom: 'from-green-50',
-        bgTo: 'to-green-100',
-        bgColor: 'bg-green-100'
-      },
-      '2024': {
-        border: 'border-blue-100',
-        hoverBorder: 'hover:border-blue-300',
-        hoverBg: 'hover:bg-blue-50/50',
-        text: 'text-blue-700',
-        bgFrom: 'from-blue-50',
-        bgTo: 'to-blue-100',
-        bgColor: 'bg-blue-100'
-      }
-    }
-
-    // Retourner le schéma pour l'année ou un schéma par défaut (gris neutre)
-    return colorSchemes[year] || {
-      border: 'border-gray-100',
-      hoverBorder: 'hover:border-gray-300',
-      hoverBg: 'hover:bg-gray-50/50',
-      text: 'text-gray-700',
-      bgFrom: 'from-gray-50',
-      bgTo: 'to-gray-100',
-      bgColor: 'bg-gray-100'
-    }
-  }, [])
-
-  // Fonction pour tronquer les noms longs (supprimée - non utilisée)
-  // const truncateName = (name: string, maxLength: number = 30): string => {
-  //   if (name.length <= maxLength) return name
-  //   return name.substring(0, maxLength) + "..."
-  // }
-
-  // Dédoublonner après troncature pour éviter les doublons visuels (supprimé - non utilisé)
-  // const uniqueTruncatedCommunes = [...new Set(uniqueCommunes.map(commune => truncateName(commune)))]
-  //   .map(truncatedName => {
-  //     // Trouver le nom original le plus court qui correspond à cette troncature
-  //     const matchingOriginals = uniqueCommunes.filter(commune => truncateName(commune) === truncatedName)
-  //     return matchingOriginals.reduce((shortest, current) => 
-  //       current.length < shortest.length ? current : shortest
-  //     )
-  //   })
 
   if (loading) {
     return <LoadingScreen />
@@ -599,7 +560,7 @@ export default function SubsidesDashboard() {
           <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Erreur</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={() => loadData(selectedDataYear)} className="flex items-center gap-2">
+          <Button onClick={() => loadData(selectedDataYear)} className="flex items-center gap-2" aria-label="Réessayer de charger les données">
             <RefreshCw className="h-4 w-4" />
             Réessayer
           </Button>
@@ -612,11 +573,29 @@ export default function SubsidesDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
       {/* Notification discrète pour la copie */}
       {showCopyNotification && (
-        <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right duration-300">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div 
+          className="fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right duration-300"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          Lien copié !
+          <span>Lien copié !</span>
+        </div>
+      )}
+      
+      {/* Notification d'erreur */}
+      {errorNotification && (
+        <div 
+          className="fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right duration-300"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <AlertCircle className="w-4 h-4" aria-hidden="true" />
+          <span>{errorNotification}</span>
         </div>
       )}
       
@@ -658,6 +637,7 @@ export default function SubsidesDashboard() {
                       }}
                       maxLength={24}
                         className="pl-9 sm:pl-10 pr-8 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-green-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg"
+                        aria-label="Rechercher un bénéficiaire, projet ou numéro de dossier"
                         style={{ caretColor: '#10b981' }}
                       />
                     {searchTerm && (
@@ -680,10 +660,13 @@ export default function SubsidesDashboard() {
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-shrink-0">
                 {/* Année */}
                 <Select value={selectedDataYear} onValueChange={(value) => {
-                  console.log("Changement d'année:", value)
+                  devLog("Changement d'année:", value)
                   setSelectedDataYear(value)
                 }}>
-                  <SelectTrigger className="h-10 w-full sm:w-[160px] text-sm border-gray-300 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md bg-white flex items-center justify-center [&>svg]:hidden">
+                  <SelectTrigger 
+                    className="h-10 w-full sm:w-[160px] text-sm border-gray-300 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md bg-white flex items-center justify-center [&>svg]:hidden"
+                    aria-label="Sélectionner l'année des données"
+                  >
                     <SelectValue placeholder="Année" className="text-center" />
                   </SelectTrigger>
                   <SelectContent>
@@ -714,6 +697,7 @@ export default function SubsidesDashboard() {
                       disabled={isExporting || filteredSubsides.length === 0}
                       className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
                       title="Exporter les données"
+                      aria-label="Exporter les données filtrées"
                     >
                       <Download className={`w-4 h-4 ${isExporting ? 'animate-spin' : ''}`} />
                     </Button>
@@ -760,6 +744,7 @@ export default function SubsidesDashboard() {
                               checked={selectedColumns.includes(column)}
                               onChange={() => handleColumnToggle(column)}
                               className="w-4 h-4 text-green-900 border-gray-300 rounded focus:ring-green-700"
+                              aria-label={`Sélectionner la colonne ${COLUMN_LABELS[column]}`}
                             />
                             <span className="text-sm sm:text-base text-gray-700">{COLUMN_LABELS[column]}</span>
                           </label>
@@ -776,6 +761,7 @@ export default function SubsidesDashboard() {
                         onClick={() => handleExport('csv')}
                         disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
                         className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
+                        aria-label="Exporter en CSV (compatible Excel)"
                         style={{
                           backgroundColor: '#A7F3D0', // Pastel vert menthe
                           borderColor: '#6EE7B7',
@@ -800,6 +786,7 @@ export default function SubsidesDashboard() {
                         onClick={() => handleExport('excel')}
                         disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
                         className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
+                        aria-label="Exporter en Excel (XLSX)"
                         style={{
                           backgroundColor: '#BFDBFE', // Pastel bleu
                           borderColor: '#93C5FD',
@@ -823,6 +810,7 @@ export default function SubsidesDashboard() {
                         onClick={() => handleExport('json')}
                         disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
                         className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
+                        aria-label="Exporter en JSON (pour développeurs)"
                         style={{
                           backgroundColor: '#E9D5FF', // Pastel violet lavande
                           borderColor: '#D8B4FE',
@@ -847,6 +835,7 @@ export default function SubsidesDashboard() {
                         onClick={() => handleExport('pdf')}
                         disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
                         className="w-full flex items-center justify-center gap-2 text-gray-800 font-semibold transition-all"
+                        aria-label="Exporter en PDF (résumé)"
                         style={{
                           backgroundColor: '#FBCFE8', // Pastel rose
                           borderColor: '#F9A8D4',
@@ -883,6 +872,7 @@ export default function SubsidesDashboard() {
                       size="sm"
                       className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
                       title="Partager"
+                      aria-label="Partager cette application"
                   >
                     <Share2 className="w-4 h-4" />
                   </Button>
@@ -891,7 +881,7 @@ export default function SubsidesDashboard() {
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                       <Share2 className="w-5 h-5" />
-                      Partager Subsides Bruxelles
+                      Partager Subsides Radar
                     </DialogTitle>
                     <DialogDescription>
                       Partagez cette application de transparence des finances publiques
@@ -995,7 +985,12 @@ export default function SubsidesDashboard() {
           <CardHeader className="bg-gradient-to-r from-indigo-200 to-blue-200 text-gray-800 rounded-t-lg px-3 sm:px-4 py-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
               <div className="flex-1 min-w-0">
-                <CardTitle className="text-base sm:text-lg font-semibold">Liste des subsides ({filteredSubsides.length} résultats)</CardTitle>
+                <CardTitle 
+                  className="text-1xl sm:text-2xl md:text-3xl font-light bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent" 
+                  style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}
+                >
+                  Liste des subsides ({filteredSubsides.length})
+                </CardTitle>
                 <CardDescription className="text-xs text-gray-700 hidden sm:block">Cliquez pour les détails</CardDescription>
               </div>
               {/* Mini-graphique d'évolution */}
@@ -1024,7 +1019,7 @@ export default function SubsidesDashboard() {
                       
                       {/* Nom du bénéficiaire */}
                       <h3 
-                        className={`font-semibold text-xs sm:text-sm ${colorScheme.text} mb-1.5 sm:mb-2 line-clamp-1`}
+                        className="font-semibold text-xs sm:text-sm text-blue-900 mb-1.5 sm:mb-2 line-clamp-1"
                         title={subside.beneficiaire_begunstigde}
                       >
                         {subside.beneficiaire_begunstigde}
@@ -1033,7 +1028,7 @@ export default function SubsidesDashboard() {
                       {/* Montant - Plus discret, sans Badge */}
                       <div className="mb-1.5 sm:mb-2">
                         <span className="text-xs sm:text-sm text-gray-600 font-medium">
-                          {subside.montant_octroye_toegekend_bedrag.toLocaleString()} €
+                          {formatNumberWithSpaces(subside.montant_octroye_toegekend_bedrag)} €
                         </span>
                       </div>
                       
@@ -1051,11 +1046,13 @@ export default function SubsidesDashboard() {
                   <DialogContent className={`w-[95vw] sm:w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-0 border-2 ${colorScheme.border} rounded-lg`}>
                     {/* Header avec couleur de l'année */}
                     <div className={`bg-gradient-to-r ${colorScheme.bgFrom} ${colorScheme.bgTo} rounded-t-lg px-4 sm:px-6 py-3 sm:py-4 border-b-2 ${colorScheme.border}`}>
-                      <DialogHeader className="space-y-1 sm:space-y-2">
-                        <DialogTitle className={`flex items-center gap-2 text-sm sm:text-base ${colorScheme.text} font-semibold line-clamp-2`}>
-                          <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <DialogHeader className="space-y-1 sm:space-y-2 pt-2 sm:pt-3">
+                        <DialogTitle className="text-sm sm:text-base text-blue-900 font-light line-clamp-2" style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
                           <span className="break-words">{subside.beneficiaire_begunstigde}</span>
                         </DialogTitle>
+                        <DialogDescription className="sr-only">
+                          Détails du subside pour {subside.beneficiaire_begunstigde} en {year}
+                        </DialogDescription>
                         {/* Badge année */}
                         <div className="flex items-center gap-2 pt-1">
                           <Badge className={`${colorScheme.bgColor} ${colorScheme.text} border-0 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1 font-semibold`}>
@@ -1069,10 +1066,10 @@ export default function SubsidesDashboard() {
                     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                           {/* Liens externes - En haut et colorés avec style de l'année */}
                           <div className={`bg-gradient-to-r ${colorScheme.bgFrom} ${colorScheme.bgTo} rounded-lg p-3 sm:p-4 border ${colorScheme.border}`}>
-                            <h4 className={`font-semibold text-sm sm:text-base mb-2 sm:mb-3 ${colorScheme.text}`}>
+                            <h4 className={`font-light text-sm sm:text-base mb-2 sm:mb-3 ${colorScheme.text}`} style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
                               Liens externes
                             </h4>
-                            <div className="flex flex-wrap gap-2 sm:gap-3">
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         {subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie && (
                           <>
                           <Button
@@ -1084,10 +1081,11 @@ export default function SubsidesDashboard() {
                                   window.open(kboUrl, '_blank')
                                 }
                               }}
-                                  className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
+                                  className="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm hover:shadow transition-all duration-200 rounded-md px-2 sm:px-2.5 py-1.5 sm:py-1.5 h-auto text-xs sm:text-xs font-medium"
+                                  aria-label={`Ouvrir le registre KBO pour ${subside.beneficiaire_begunstigde} dans un nouvel onglet`}
                           >
-                            <Building className="w-4 h-4" />
-                            Registre KBO
+                            <Building className="w-3.5 h-3.5" />
+                            <span>KBO</span>
                           </Button>
                         <Button
                               onClick={() => {
@@ -1099,19 +1097,21 @@ export default function SubsidesDashboard() {
                                 })()
                                 window.open(northDataUrl, '_blank')
                               }}
-                                className="flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
+                                className="flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow transition-all duration-200 rounded-md px-2 sm:px-2.5 py-1.5 sm:py-1.5 h-auto text-xs sm:text-xs font-medium"
+                                aria-label={`Rechercher ${subside.beneficiaire_begunstigde} sur North Data dans un nouvel onglet`}
                         >
-                          <FileText className="w-4 h-4" />
-                          North Data
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>North Data</span>
                         </Button>
                           </>
                         )}
                         <Button
                           onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(subside.beneficiaire_begunstigde + ' Bruxelles subside')}`, '_blank')}
-                                className="flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
+                                className="flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 hover:border-amber-300 shadow-sm hover:shadow transition-all duration-200 rounded-md px-2 sm:px-2.5 py-1.5 sm:py-1.5 h-auto text-xs sm:text-xs font-medium"
+                                aria-label={`Rechercher ${subside.beneficiaire_begunstigde} sur Google dans un nouvel onglet`}
                         >
-                          <Search className="w-4 h-4" />
-                          Google
+                          <Search className="w-3.5 h-3.5" />
+                          <span>Google</span>
                         </Button>
                         <Button
                           onClick={() => {
@@ -1119,10 +1119,11 @@ export default function SubsidesDashboard() {
                             const openDataUrl = subside.source_url_open_data || 'https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score'
                             window.open(openDataUrl, '_blank')
                           }}
-                                className="flex items-center justify-center gap-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 hover:border-violet-300 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg px-3 sm:px-4 py-2.5 sm:py-2 min-h-[44px] text-sm sm:text-base"
+                                className="flex items-center justify-center gap-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 hover:border-violet-300 shadow-sm hover:shadow transition-all duration-200 rounded-md px-2 sm:px-2.5 py-1.5 sm:py-1.5 h-auto text-xs sm:text-xs font-medium"
+                                aria-label="Ouvrir la source de données Open Data Brussels dans un nouvel onglet"
                         >
-                          <FileText className="w-4 h-4" />
-                          Source Data
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Source</span>
                         </Button>
                       </div>
                     </div>
@@ -1130,74 +1131,30 @@ export default function SubsidesDashboard() {
                           <div className="space-y-4 sm:space-y-6">
                             {/* Informations financières */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                              <h4 className={`font-light text-sm sm:text-base ${colorScheme.text}`} style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
                                 Informations financières
                               </h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                              <div className={`grid gap-3 sm:gap-4 ${subside.montant_octroye_toegekend_bedrag === subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                               <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
                                   <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Montant octroyé</h5>
                                 <p className={`text-lg sm:text-xl md:text-2xl font-bold ${colorScheme.text}`}>
-                            {subside.montant_octroye_toegekend_bedrag.toLocaleString()} €
+                            {formatNumberWithSpaces(subside.montant_octroye_toegekend_bedrag)} €
                           </p>
                         </div>
+                              {subside.montant_octroye_toegekend_bedrag !== subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023 && (
                               <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
                                   <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Montant prévu au budget</h5>
                                   <p className={`text-base sm:text-lg font-semibold ${colorScheme.text}`}>
-                              {subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023.toLocaleString()} €
+                              {formatNumberWithSpaces(subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023)} €
                             </p>
                           </div>
-                        </div>
-                      </div>
-
-                            {/* Informations bénéficiaire */}
-                            <div className="space-y-2 sm:space-y-3">
-                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
-                                Informations bénéficiaire
-                              </h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
-                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Nom</h5>
-                                  <button
-                                    onClick={() => {
-                                      // Créer un filter preset pour partage
-                                      const filterId = createFilterPreset(
-                                        {
-                                          search: subside.beneficiaire_begunstigde,
-                                          year: selectedDataYear !== 'all' ? selectedDataYear : undefined,
-                                        },
-                                        'beneficiary'
-                                      )
-                                      
-                                      // Rediriger vers la liste filtrée
-                                      if (filterId && typeof window !== 'undefined') {
-                                        window.location.href = `/?filter=${filterId}`
-                                      } else {
-                                        // Fallback : appliquer le filtre localement
-                                        setSearchTerm(subside.beneficiaire_begunstigde)
-                                      }
-                                    }}
-                                    className={`font-semibold text-sm sm:text-base ${colorScheme.text} hover:opacity-80 active:opacity-70 hover:underline active:underline cursor-pointer text-left flex items-center gap-2 group min-h-[44px] sm:min-h-0 py-1 sm:py-0 touch-manipulation w-full`}
-                                    title={`Voir tous les subsides de ${subside.beneficiaire_begunstigde}`}
-                                  >
-                                    <span className="flex-1 break-words">{subside.beneficiaire_begunstigde}</span>
-                                    <Badge variant="outline" className={`text-xs font-normal opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 ${colorScheme.border}`}>
-                                      {subsides.filter(s => s.beneficiaire_begunstigde === subside.beneficiaire_begunstigde).length} subside{subsides.filter(s => s.beneficiaire_begunstigde === subside.beneficiaire_begunstigde).length > 1 ? 's' : ''}
-                                    </Badge>
-                                  </button>
-                                </div>
-                                <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
-                                  <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Numéro BCE (KBO)</h5>
-                            <p className={`${colorScheme.text} font-medium`}>
-                              {subside.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie ||
-                                "Non spécifié"}
-                            </p>
-                          </div>
+                              )}
                         </div>
                       </div>
 
                             {/* Informations projet */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                              <h4 className={`font-light text-sm sm:text-base ${colorScheme.text}`} style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
                                 Projet
                               </h4>
                               <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm space-y-3 sm:space-y-4`}>
@@ -1214,7 +1171,7 @@ export default function SubsidesDashboard() {
 
                             {/* Informations administratives */}
                             <div className="space-y-2 sm:space-y-3">
-                              <h4 className={`font-semibold text-sm sm:text-base ${colorScheme.text}`}>
+                              <h4 className={`font-light text-sm sm:text-base ${colorScheme.text}`} style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
                                 Informations administratives
                               </h4>
                               <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
@@ -1239,86 +1196,182 @@ export default function SubsidesDashboard() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center gap-2 mt-6">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="min-h-[44px] sm:min-h-0"
-                >
-                  Précédent
-                </Button>
+                {/* Version simplifiée pour mobile */}
+                <div className="flex items-center gap-1 sm:hidden">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="min-h-[44px] px-2"
+                    aria-label="Page précédente"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
 
-                <div className="flex gap-1">
-                  {/* Pagination intelligente - affiche seulement quelques numéros */}
-                  {(() => {
-                    const pages = []
-                    
-                    // Toujours afficher la première page
-                    if (totalPages > 0) {
-                      pages.push(1)
-                    }
-                    
-                    // Calculer la plage de pages à afficher autour de la page courante
-                    const start = Math.max(2, currentPage - 1)
-                    const end = Math.min(totalPages - 1, currentPage + 1)
-                    
-                    // Ajouter "..." si nécessaire
-                    if (start > 2) {
-                      pages.push('...')
-                    }
-                    
-                    // Ajouter les pages autour de la page courante
-                    for (let i = start; i <= end; i++) {
-                      if (i !== 1 && i !== totalPages) {
-                        pages.push(i)
-                      }
-                    }
-                    
-                    // Ajouter "..." si nécessaire
-                    if (end < totalPages - 1) {
-                      pages.push('...')
-                    }
-                    
-                    // Toujours afficher la dernière page (si différente de la première)
-                    if (totalPages > 1) {
-                      pages.push(totalPages)
-                    }
-                    
-                    return pages.map((page, index) => (
-                      <Button
-                        key={index}
-                        variant={currentPage === page ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => typeof page === 'number' && setCurrentPage(page)}
-                        disabled={page === '...'}
-                        className={`min-h-[44px] sm:min-h-0 ${currentPage === page ? "text-gray-800 font-medium" : ""}`}
-                        style={currentPage === page ? {
-                          backgroundColor: '#A7F3D0', // Pastel vert menthe
-                          borderColor: '#6EE7B7',
-                        } : undefined}
-                      >
-                        {page}
-                      </Button>
-                    ))
-                  })()}
+                  <Button
+                    variant={currentPage === 1 ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    className={`min-h-[44px] px-3 ${currentPage === 1 ? "text-gray-800 font-medium" : ""}`}
+                    style={currentPage === 1 ? {
+                      backgroundColor: '#A7F3D0',
+                      borderColor: '#6EE7B7',
+                    } : undefined}
+                    aria-label="Aller à la page 1"
+                    aria-current={currentPage === 1 ? 'page' : undefined}
+                  >
+                    1
+                  </Button>
+
+                  {totalPages > 1 && (
+                    <>
+                      {currentPage > 2 && totalPages > 2 && (
+                        <span className="px-1 text-gray-500">...</span>
+                      )}
+                      
+                      {currentPage !== 1 && currentPage !== totalPages && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => setCurrentPage(currentPage)}
+                          className="min-h-[44px] px-3 text-gray-800 font-medium"
+                          style={{
+                            backgroundColor: '#A7F3D0',
+                            borderColor: '#6EE7B7',
+                          }}
+                          aria-label={`Page ${currentPage}`}
+                          aria-current="page"
+                        >
+                          {currentPage}
+                        </Button>
+                      )}
+
+                      {currentPage < totalPages - 1 && totalPages > 2 && (
+                        <span className="px-1 text-gray-500">...</span>
+                      )}
+
+                      {totalPages > 1 && (
+                        <Button
+                          variant={currentPage === totalPages ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(totalPages)}
+                          className={`min-h-[44px] px-3 ${currentPage === totalPages ? "text-gray-800 font-medium" : ""}`}
+                          style={currentPage === totalPages ? {
+                            backgroundColor: '#A7F3D0',
+                            borderColor: '#6EE7B7',
+                          } : undefined}
+                          aria-label={`Aller à la page ${totalPages}`}
+                          aria-current={currentPage === totalPages ? 'page' : undefined}
+                        >
+                          {totalPages}
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="min-h-[44px] px-2"
+                    aria-label="Page suivante"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
                 </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="min-h-[44px] sm:min-h-0"
-                >
-                  Suivant
-                </Button>
+                {/* Version complète pour desktop */}
+                <div className="hidden sm:flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="min-h-0"
+                    aria-label="Aller à la page précédente"
+                  >
+                    Précédent
+                  </Button>
+
+                  <div className="flex gap-1">
+                    {/* Pagination intelligente - affiche seulement quelques numéros */}
+                    {(() => {
+                      const pages = []
+                      
+                      // Toujours afficher la première page
+                      if (totalPages > 0) {
+                        pages.push(1)
+                      }
+                      
+                      // Calculer la plage de pages à afficher autour de la page courante
+                      const start = Math.max(2, currentPage - 1)
+                      const end = Math.min(totalPages - 1, currentPage + 1)
+                      
+                      // Ajouter "..." si nécessaire
+                      if (start > 2) {
+                        pages.push('...')
+                      }
+                      
+                      // Ajouter les pages autour de la page courante
+                      for (let i = start; i <= end; i++) {
+                        if (i !== 1 && i !== totalPages) {
+                          pages.push(i)
+                        }
+                      }
+                      
+                      // Ajouter "..." si nécessaire
+                      if (end < totalPages - 1) {
+                        pages.push('...')
+                      }
+                      
+                      // Toujours afficher la dernière page (si différente de la première)
+                      if (totalPages > 1) {
+                        pages.push(totalPages)
+                      }
+                      
+                      return pages.map((page, index) => (
+                        <Button
+                          key={index}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => typeof page === 'number' && setCurrentPage(page)}
+                          disabled={page === '...'}
+                          className={`min-h-0 ${currentPage === page ? "text-gray-800 font-medium" : ""}`}
+                          style={currentPage === page ? {
+                            backgroundColor: '#A7F3D0', // Pastel vert menthe
+                            borderColor: '#6EE7B7',
+                          } : undefined}
+                          aria-label={typeof page === 'number' ? `Aller à la page ${page}` : undefined}
+                          aria-current={currentPage === page ? 'page' : undefined}
+                        >
+                          {page}
+                        </Button>
+                      ))
+                    })()}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="min-h-0"
+                    aria-label="Aller à la page suivante"
+                  >
+                    Suivant
+                  </Button>
+                </div>
               </div>
             )}
             </CardContent>
           </Card>
         </div>
       </div>
+      
+      {/* Footer avec compteur de visite et radars */}
+      <AppFooter />
     </div>
   )
 }

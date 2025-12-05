@@ -81,9 +81,10 @@ export const Top10ListChart: React.FC<Top10ListChartProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <div
-                  className="font-medium text-gray-900"
+                  className="font-medium"
                   style={{
                     fontSize: responsiveProps.isMobile ? '0.875rem' : '1rem',
+                    color: '#1e3a8a', // Bleu foncé (blue-900)
                   }}
                   title={item.name}
                 >

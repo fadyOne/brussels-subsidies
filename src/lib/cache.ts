@@ -25,6 +25,7 @@
  */
 
 import type { Subside } from './types'
+import { devWarn } from './utils'
 
 // Version du cache - INCRÉMENTER si le format des données change
 const CACHE_VERSION = '1.0.0'
@@ -171,7 +172,7 @@ export function setCachedData(data: Subside[], year: string): boolean {
     const MAX_SIZE = 4 * 1024 * 1024
 
     if (estimatedSize > MAX_SIZE) {
-      console.warn(`⚠️ Données trop volumineuses pour le cache (${(estimatedSize / 1024 / 1024).toFixed(2)}MB), pas de mise en cache`)
+      devWarn(`⚠️ Données trop volumineuses pour le cache (${(estimatedSize / 1024 / 1024).toFixed(2)}MB), pas de mise en cache`)
       return false
     }
 

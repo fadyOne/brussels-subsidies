@@ -139,7 +139,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 <p className="text-sm text-blue-900 mb-2">
                   <strong>Que pouvez-vous faire ?</strong>
                 </p>
-                <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                <ul className="text-sm text-blue-900 space-y-1 list-disc list-inside">
                   <li>Réessayer en cliquant sur &quot;Réessayer&quot;</li>
                   <li>Recharger la page complètement</li>
                   <li>Retourner à la page d&apos;accueil</li>

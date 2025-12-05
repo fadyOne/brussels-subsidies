@@ -62,10 +62,10 @@ When using this data, please credit:
 
 ## 🔗 **Related Resources**
 
-- [Brussels Open Data Portal](https://opendata.brussels.be/)
+- [Brussels Open Data Portal](https://opendata.brussels.be/explore/?q=subside&disjunctive.theme&disjunctive.keyword&disjunctive.publisher&disjunctive.attributions&disjunctive.dcat.creator&disjunctive.dcat.contributor&disjunctive.modified&disjunctive.data_processed&disjunctive.features&disjunctive.license&disjunctive.language&sort=explore.popularity_score)
 - [Brussels City Hall](https://www.bruxelles.be/)
 - [Data Processing Documentation](./README-DATA.md)
-- [Application Source Code](https://github.com/your-repo/brussels-sub)
+- [Application Source Code](https://github.com/)
 
 ---
 
