@@ -9,9 +9,10 @@ import { ChartSkeleton } from "@/components/ChartSkeleton"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer } from "@/components/ui/chart"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, RefreshCw, PieChart as PieChartIcon } from "lucide-react"
+import { AlertCircle, RefreshCw, PieChart as PieChartIcon, Search, X } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
 import { AppFooter } from "@/components/AppFooter"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -94,6 +95,17 @@ export default function AnalysePage() {
   // États pour la comparaison entre années
   const [comparisonCategoryFilter, setComparisonCategoryFilter] = useState<string>("all")
   const [selectedComparisonYears, setSelectedComparisonYears] = useState<string[]>([])
+  // État pour le sous-onglet de comparaison (organisations ou global)
+  const [comparisonView, setComparisonView] = useState<"organizations" | "global">("organizations")
+  // États pour la comparaison d'organisations (tableaux pour plusieurs organisations)
+  const [selectedOrg1, setSelectedOrg1] = useState<string[]>([])
+  const [selectedOrg2, setSelectedOrg2] = useState<string[]>([])
+  const [orgSearch1, setOrgSearch1] = useState<string>("")
+  const [orgSearch2, setOrgSearch2] = useState<string>("")
+  // Comparaison automatique : affichée dès qu'il y a au moins une organisation de chaque côté
+  const showComparison = useMemo(() => {
+    return selectedOrg1.length > 0 && selectedOrg2.length > 0
+  }, [selectedOrg1.length, selectedOrg2.length])
   // État pour le nombre de bénéficiaires à afficher
   const topBeneficiariesCount = 10 // Fixé à 10, sélecteur retiré
   
@@ -235,15 +247,22 @@ export default function AnalysePage() {
         
         const yearPromises = years.map(async (year: string) => {
           try {
-            const jsonData = await fetch(`/data-${year}.json`)
+            // Essayer d'abord les fichiers validés, puis fallback vers les originaux
+            let jsonData = await fetch(`/data-${year}-validated.json`)
             
             if (!jsonData.ok) {
-              return null
+              // Fallback vers le fichier original
+              jsonData = await fetch(`/data-${year}.json`)
+              if (!jsonData.ok) {
+                return null
+              }
             }
             
             const rawData: unknown[] = await jsonData.json()
             
             if (rawData && rawData.length > 0) {
+              // Les fichiers validés sont déjà normalisés, mais on applique quand même la normalisation
+              // pour s'assurer de la cohérence (les flags _validationStatus seront préservés)
               const normalizedData = normalizeSubsidesArray(rawData, year)
               return normalizedData
             }
@@ -260,15 +279,22 @@ export default function AnalysePage() {
           throw new Error("Aucune donnée récupérée pour toutes les années")
         }
       } else {
-        const jsonData = await fetch(`/data-${dataYear}.json`)
+        // Essayer d'abord les fichiers validés, puis fallback vers les originaux
+        let jsonData = await fetch(`/data-${dataYear}-validated.json`)
         
         if (!jsonData.ok) {
-          throw new Error(`HTTP error! status: ${jsonData.status}`)
+          // Fallback vers le fichier original
+          jsonData = await fetch(`/data-${dataYear}.json`)
+          if (!jsonData.ok) {
+            throw new Error(`HTTP error! status: ${jsonData.status}`)
+          }
         }
         
         const rawData: unknown[] = await jsonData.json()
 
         if (rawData && rawData.length > 0) {
+          // Les fichiers validés sont déjà normalisés, mais on applique quand même la normalisation
+          // pour s'assurer de la cohérence (les flags _validationStatus seront préservés)
           const normalizedData = normalizeSubsidesArray(rawData, dataYear)
           allData = normalizedData
         } else {
@@ -642,6 +668,366 @@ export default function AnalysePage() {
     return result
   }, [subsides, selectedComparisonYears])
 
+  // Fonction helper pour trouver les subsides d'une organisation
+  // AMÉLIORÉE : Retourne TOUS les subsides correspondants, IGNORE les BCE (non fiables)
+  // Priorité : Nom normalisé > Recherche exacte > Recherche partielle
+  const findOrgSubsides = useCallback((orgName: string): Subside[] => {
+    const normalizedSearch = normalizeBeneficiaryNameDynamic(orgName)
+    const searchLower = orgName.toLowerCase().trim()
+    
+    // 1. Recherche par nom normalisé (IGNORE les BCE, regroupe tous les subsides avec le même nom normalisé)
+    // C'est la méthode la plus fiable car les BCE peuvent être incorrects
+    const allMatchesByNormalizedName = new Set<Subside>()
+    
+    subsides.forEach(s => {
+      if (!s.beneficiaire_begunstigde) return
+      
+      const beneficiaryNormalized = normalizeBeneficiaryNameDynamic(s.beneficiaire_begunstigde)
+      
+      // Si le nom normalisé correspond exactement, c'est un match
+      if (beneficiaryNormalized === normalizedSearch && normalizedSearch !== '') {
+        allMatchesByNormalizedName.add(s)
+      }
+    })
+    
+    if (allMatchesByNormalizedName.size > 0) {
+      const result = Array.from(allMatchesByNormalizedName)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[findOrgSubsides] "${orgName}" trouvé via nom normalisé (IGNORE BCE):`, {
+          count: result.length,
+          totalAmount: result.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0),
+          years: [...new Set(result.map(s => s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend))],
+          bces: [...new Set(result.map(s => s.le_numero_de_bce_du_beneficiaire_de_la_subvention_kbo_nummer_van_de_begunstigde_van_de_subsidie).filter(Boolean))]
+        })
+      }
+      return result
+    }
+    
+    // 2. Recherche exacte par nom (fallback)
+    const exactMatches = subsides.filter(s => s.beneficiaire_begunstigde === orgName)
+    if (exactMatches.length > 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[findOrgSubsides] "${orgName}" trouvé via recherche exacte:`, {
+          count: exactMatches.length,
+          totalAmount: exactMatches.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
+        })
+      }
+      return exactMatches
+    }
+    
+    // 3. Recherche partielle (case-insensitive) - RETOURNE TOUS LES MATCHES
+    const allMatches = new Set<Subside>()
+    const matchedNames = new Set<string>()
+    
+    subsides.forEach(s => {
+      if (!s.beneficiaire_begunstigde) return
+      
+      const beneficiaryLower = s.beneficiaire_begunstigde.toLowerCase()
+      const beneficiaryNormalized = normalizeBeneficiaryNameDynamic(s.beneficiaire_begunstigde)
+      
+      // Match si le nom contient la recherche OU si la normalisation contient la recherche normalisée
+      if (beneficiaryLower.includes(searchLower) || 
+          (normalizedSearch && beneficiaryNormalized.includes(normalizedSearch))) {
+        allMatches.add(s)
+        matchedNames.add(s.beneficiaire_begunstigde)
+      }
+    })
+    
+    // Si on trouve des matches, les retourner tous
+    if (allMatches.size > 0) {
+      const result = Array.from(allMatches)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[findOrgSubsides] "${orgName}" trouvé via recherche partielle:`, {
+          count: result.length,
+          totalAmount: result.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0),
+          matchedNames: Array.from(matchedNames),
+          searchLower,
+          normalizedSearch
+        })
+      }
+      return result
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`[findOrgSubsides] "${orgName}" non trouvé`)
+    }
+    return []
+  }, [subsides])
+
+  // Liste des organisations disponibles (pour l'autocomplete)
+  // AMÉLIORÉE : Regroupe par nom normalisé (IGNORE les BCE non fiables)
+  const availableOrganizations = useMemo(() => {
+    // Créer un Map par nom normalisé (pas par BCE)
+    const orgMap = new Map<string, {
+      displayName: string
+      originalNames: string[]
+      totalAmount: number
+      count: number
+      allSearchableNames: string[]
+    }>()
+    
+    // Regrouper par nom normalisé (ignore les BCE)
+    const normalizedMap = new Map<string, {
+      displayName: string
+      originalNames: Set<string>
+      subsides: Subside[]
+    }>()
+    
+    subsides.forEach(subside => {
+      const beneficiaryName = subside.beneficiaire_begunstigde
+      if (!beneficiaryName || !beneficiaryName.trim()) return
+      
+      const normalized = normalizeBeneficiaryNameDynamic(beneficiaryName)
+      if (!normalized) return
+      
+      if (!normalizedMap.has(normalized)) {
+        normalizedMap.set(normalized, {
+          displayName: beneficiaryName, // Premier nom trouvé
+          originalNames: new Set([beneficiaryName]),
+          subsides: [subside]
+        })
+      } else {
+        const group = normalizedMap.get(normalized)!
+        group.originalNames.add(beneficiaryName)
+        group.subsides.push(subside)
+        // Utiliser le nom le plus court comme displayName
+        if (beneficiaryName.length < group.displayName.length) {
+          group.displayName = beneficiaryName
+        }
+      }
+    })
+    
+    // Convertir en format pour l'autocomplete
+    normalizedMap.forEach((group) => {
+      const allNames = Array.from(group.originalNames)
+      const totalAmount = group.subsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
+      
+      orgMap.set(group.displayName, {
+        displayName: group.displayName,
+        originalNames: allNames,
+        totalAmount,
+        count: group.subsides.length,
+        allSearchableNames: allNames
+      })
+    })
+    
+    return Array.from(orgMap.values())
+      .sort((a, b) => b.totalAmount - a.totalAmount)
+  }, [subsides])
+
+  // Fonction helper pour recherche multi-mots-clés
+  const matchesMultiKeywordSearch = useCallback((searchText: string, org: typeof availableOrganizations[0]): boolean => {
+    if (!searchText.trim()) return true
+    
+    const searchLower = searchText.toLowerCase().trim()
+    const searchWords = searchLower.split(/\s+/).filter(word => word.length > 0)
+    
+    const allSearchTexts = [
+      org.displayName,
+      ...org.allSearchableNames
+    ].map(name => ({
+      original: name.toLowerCase(),
+      normalized: name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ')
+    }))
+    
+    if (searchWords.length === 1) {
+      const singleWord = searchWords[0]
+      const normalizedWord = singleWord.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ')
+      
+      for (const text of allSearchTexts) {
+        if (text.original.includes(singleWord) || text.normalized.includes(normalizedWord)) {
+          return true
+        }
+      }
+      return false
+    }
+    
+    const allNamesTextOriginal = allSearchTexts.map(t => t.original).join(' ')
+    const allNamesTextNormalized = allSearchTexts.map(t => t.normalized).join(' ')
+    
+    return searchWords.every(word => {
+      const normalizedWord = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ')
+      return allNamesTextOriginal.includes(word) || allNamesTextNormalized.includes(normalizedWord)
+    })
+  }, [])
+
+  // Filtre les organisations pour l'autocomplete
+  const filteredOrgs1 = useMemo(() => {
+    if (!orgSearch1) return availableOrganizations.slice(0, 15)
+    return availableOrganizations
+      .filter(org => matchesMultiKeywordSearch(orgSearch1, org))
+      .filter(org => !selectedOrg1.includes(org.displayName)) // Exclure celles déjà sélectionnées
+      .slice(0, 15)
+  }, [availableOrganizations, orgSearch1, selectedOrg1, matchesMultiKeywordSearch])
+
+  const filteredOrgs2 = useMemo(() => {
+    if (!orgSearch2) return availableOrganizations.slice(0, 15)
+    return availableOrganizations
+      .filter(org => matchesMultiKeywordSearch(orgSearch2, org))
+      .filter(org => !selectedOrg2.includes(org.displayName)) // Exclure celles déjà sélectionnées
+      .slice(0, 15)
+  }, [availableOrganizations, orgSearch2, selectedOrg2, matchesMultiKeywordSearch])
+
+  // Calcul des données pour l'organisation 1 (peut être plusieurs organisations)
+  const org1Data = useMemo(() => {
+    if (!selectedOrg1 || selectedOrg1.length === 0) return null
+
+    const allOrgSubsides: Subside[] = []
+    const allOriginalNames = new Set<string>()
+    const orgNames: string[] = []
+
+    selectedOrg1.forEach(orgName => {
+      const orgSubsides = findOrgSubsides(orgName)
+      allOrgSubsides.push(...orgSubsides)
+      orgSubsides.forEach(s => allOriginalNames.add(s.beneficiaire_begunstigde))
+      orgNames.push(orgName)
+    })
+
+    if (allOrgSubsides.length === 0) return null
+
+    // Fonction helper pour normaliser l'année (extraire YYYY d'un format quelconque)
+    const normalizeYear = (yearValue: string | null | undefined): string | null => {
+      if (!yearValue) return null
+      const yearStr = String(yearValue).trim()
+      // Extraire les 4 premiers chiffres (format YYYY)
+      const yearMatch = yearStr.match(/^(\d{4})/)
+      return yearMatch ? yearMatch[1] : null
+    }
+
+    const allYears = ['2019', '2020', '2021', '2022', '2023', '2024']
+    const yearData = allYears.map(year => {
+      const yearSubsides = allOrgSubsides.filter(s => {
+        const subsideYear = normalizeYear(s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend)
+        return subsideYear === year
+      })
+      const amount = yearSubsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
+      return {
+        year,
+        'Montant octroyé': amount,
+        count: yearSubsides.length,
+        average: yearSubsides.length > 0 ? amount / yearSubsides.length : 0
+      }
+    })
+
+    const totalAmount = yearData.reduce((sum, d) => sum + d['Montant octroyé'], 0)
+
+    return {
+      name: orgNames.length === 1 ? orgNames[0] : `${orgNames[0]}...`,
+      originalNames: Array.from(allOriginalNames),
+      totalAmount,
+      yearData,
+      orgNames
+    }
+  }, [selectedOrg1, findOrgSubsides])
+
+  // Calcul des données pour l'organisation 2 (peut être plusieurs organisations)
+  const org2Data = useMemo(() => {
+    if (!selectedOrg2 || selectedOrg2.length === 0) return null
+
+    const allOrgSubsides: Subside[] = []
+    const allOriginalNames = new Set<string>()
+    const orgNames: string[] = []
+
+    selectedOrg2.forEach(orgName => {
+      const orgSubsides = findOrgSubsides(orgName)
+      allOrgSubsides.push(...orgSubsides)
+      orgSubsides.forEach(s => allOriginalNames.add(s.beneficiaire_begunstigde))
+      orgNames.push(orgName)
+    })
+
+    if (allOrgSubsides.length === 0) return null
+
+    // Fonction helper pour normaliser l'année (extraire YYYY d'un format quelconque)
+    const normalizeYear = (yearValue: string | null | undefined): string | null => {
+      if (!yearValue) return null
+      const yearStr = String(yearValue).trim()
+      // Extraire les 4 premiers chiffres (format YYYY)
+      const yearMatch = yearStr.match(/^(\d{4})/)
+      return yearMatch ? yearMatch[1] : null
+    }
+
+    const allYears = ['2019', '2020', '2021', '2022', '2023', '2024']
+    const yearData = allYears.map(year => {
+      const yearSubsides = allOrgSubsides.filter(s => {
+        const subsideYear = normalizeYear(s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend)
+        return subsideYear === year
+      })
+      const amount = yearSubsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
+      return {
+        year,
+        'Montant octroyé': amount,
+        count: yearSubsides.length,
+        average: yearSubsides.length > 0 ? amount / yearSubsides.length : 0
+      }
+    })
+
+    const totalAmount = yearData.reduce((sum, d) => sum + d['Montant octroyé'], 0)
+
+    return {
+      name: orgNames.length === 1 ? orgNames[0] : `${orgNames[0]}...`,
+      originalNames: Array.from(allOriginalNames),
+      totalAmount,
+      yearData,
+      orgNames
+    }
+  }, [selectedOrg2, findOrgSubsides])
+
+  // Métriques comparatives
+  const comparisonMetrics = useMemo(() => {
+    if (!org1Data || !org2Data) return null
+
+    const totalDifference = org2Data.totalAmount - org1Data.totalAmount
+    const absDifference = Math.abs(totalDifference)
+    
+    // Calculer le pourcentage de différence de manière plus intuitive
+    // On compare toujours par rapport à la plus petite valeur pour avoir un pourcentage cohérent
+    const smallerAmount = Math.min(org1Data.totalAmount, org2Data.totalAmount)
+    const largerAmount = Math.max(org1Data.totalAmount, org2Data.totalAmount)
+    
+    let totalPercentageDiff = 0
+    let ratio = 1
+    let useRatio = false
+    
+    if (smallerAmount > 0) {
+      const percentageDiff = ((largerAmount - smallerAmount) / smallerAmount) * 100
+      // Si la différence est très grande (>1000%), utiliser plutôt un ratio (ex: "5x plus")
+      if (percentageDiff > 1000) {
+        ratio = largerAmount / smallerAmount
+        useRatio = true
+        totalPercentageDiff = percentageDiff // Garder pour l'affichage si nécessaire
+      } else {
+        totalPercentageDiff = percentageDiff
+      }
+    } else if (largerAmount > 0) {
+      // Si une organisation a 0 et l'autre a quelque chose
+      totalPercentageDiff = 100
+    }
+    
+    // Déterminer quelle organisation reçoit plus
+    const org2ReceivesMore = org2Data.totalAmount > org1Data.totalAmount
+    const org1ReceivesMore = org1Data.totalAmount > org2Data.totalAmount
+
+    // Calculer la moyenne par an pour chaque groupe (nombre d'années avec des subsides)
+    const org1Years = org1Data.yearData.filter(d => d['Montant octroyé'] > 0).length
+    const org2Years = org2Data.yearData.filter(d => d['Montant octroyé'] > 0).length
+    const org1AvgPerYear = org1Years > 0 ? org1Data.totalAmount / org1Years : 0
+    const org2AvgPerYear = org2Years > 0 ? org2Data.totalAmount / org2Years : 0
+
+    return {
+      totalDifference,
+      absDifference,
+      totalPercentageDiff,
+      ratio,
+      useRatio,
+      org2ReceivesMore,
+      org1ReceivesMore,
+      org1Total: org1Data.totalAmount,
+      org2Total: org2Data.totalAmount,
+      org1AvgPerYear,
+      org2AvgPerYear
+    }
+  }, [org1Data, org2Data])
+
   // Calculer les stats pour le header (avant les early returns)
   const totalAmount = useMemo(() => {
     return subsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
@@ -682,14 +1068,14 @@ export default function AnalysePage() {
         />
 
         {/* Sous-onglets pour les graphiques */}
-        <Tabs defaultValue="top-beneficiaries" className="space-y-4 sm:space-y-6">
+        <Tabs defaultValue="comparison" className="space-y-4 sm:space-y-6">
           <div className="w-full bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 sm:p-1.5">
             <TabsList className="grid grid-cols-3 w-full h-auto gap-1 bg-transparent p-0 border-0">
               <TabsTrigger 
-                value="top-beneficiaries" 
+                value="comparison"
                 className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
               >
-                Top Bénéficiaires
+                Comparaison
               </TabsTrigger>
               <TabsTrigger 
                 value="by-category" 
@@ -698,10 +1084,10 @@ export default function AnalysePage() {
                 Par catégorie
               </TabsTrigger>
               <TabsTrigger 
-                value="comparison"
+                value="top-beneficiaries" 
                 className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
               >
-                Comparaison
+                Top Bénéficiaires
               </TabsTrigger>
             </TabsList>
           </div>
@@ -882,11 +1268,11 @@ export default function AnalysePage() {
                           tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
                           tickFormatter={(value) => {
                             if (value >= 1000000) {
-                              return `${(value / 1000000).toFixed(1)}M€`
+                              return `${Math.round(value / 1000000)}M`
                             } else if (value >= 1000) {
-                              return `${(value / 1000).toFixed(0)}K€`
+                              return `${Math.round(value / 1000)}K`
                             } else {
-                              return `${value.toLocaleString()}€`
+                              return `${Math.round(value)}`
                             }
                           }}
                         />
@@ -947,6 +1333,611 @@ export default function AnalysePage() {
 
           {/* Onglet Comparaison */}
           <TabsContent value="comparison" className="space-y-6">
+            {/* Sous-onglets pour Comparaison */}
+            <div className="flex gap-3 border-b border-gray-200 pb-3 justify-center">
+              <Button
+                variant={comparisonView === "organizations" ? "default" : "outline"}
+                onClick={() => setComparisonView("organizations")}
+                className={`${
+                  comparisonView === "organizations"
+                    ? "bg-pink-200 text-pink-600 hover:bg-pink-300 border-2 border-pink-300 shadow-md font-normal"
+                    : "text-gray-700 hover:text-gray-900 hover:bg-pink-50 border-2 border-gray-300 hover:border-pink-300 bg-white"
+                } transition-all duration-200 px-6 py-2.5 rounded-lg`}
+              >
+                Comparaison entre Organisations
+              </Button>
+              <Button
+                variant={comparisonView === "global" ? "default" : "outline"}
+                onClick={() => setComparisonView("global")}
+                className={`${
+                  comparisonView === "global"
+                    ? "bg-pink-200 text-pink-600 hover:bg-pink-300 border-2 border-pink-300 shadow-md font-normal"
+                    : "text-gray-700 hover:text-gray-900 hover:bg-pink-50 border-2 border-gray-300 hover:border-pink-300 bg-white"
+                } transition-all duration-200 px-6 py-2.5 rounded-lg`}
+              >
+                Global
+              </Button>
+            </div>
+
+            {/* Comparaison entre Organisations */}
+            {comparisonView === "organizations" && (
+            <Card className="bg-white/80 backdrop-blur-sm border border-gray-100 shadow-sm">
+              <CardHeader className="border-b border-gray-100 px-4 sm:px-6 py-3 sm:py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-base sm:text-lg font-semibold text-gray-800 leading-tight">Comparaison entre Organisations</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm text-gray-500 mt-1.5 leading-relaxed">
+                      Sélectionnez une ou plusieurs organisations pour chaque groupe à comparer
+                    </CardDescription>
+                  </div>
+                  {showComparison && (
+                    <div className="flex gap-2 sm:gap-3 flex-shrink-0">
+                      <Button
+                        onClick={() => {
+                          setSelectedOrg1([])
+                          setSelectedOrg2([])
+                          setOrgSearch1("")
+                          setOrgSearch2("")
+                        }}
+                        variant="outline"
+                        className="bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 hover:border-gray-400 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-normal shadow-sm transition-all duration-200 text-sm"
+                      >
+                        Nouvelle recherche
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="px-6 pt-4 pb-0">
+                {/* Sélection des organisations */}
+                <Card className="bg-transparent border-0 shadow-none p-0">
+                  <CardContent className="p-0">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Groupe 1 */}
+                      <div className="space-y-1.5 min-h-[180px] flex flex-col">
+                        {/* Tags des organisations sélectionnées */}
+                        <div className="min-h-[30px] flex flex-wrap gap-1 mb-1">
+                          {selectedOrg1.length > 0 && (
+                            selectedOrg1.map((orgName) => (
+                              <div
+                                key={orgName}
+                                className="flex items-center gap-0.5 text-green-700 px-1 py-0 text-[9px] font-medium border border-green-300 rounded"
+                              >
+                                <span className="max-w-[80px] truncate" title={orgName}>
+                                  {orgName.length > 12 ? `${orgName.substring(0, 12)}...` : orgName}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setSelectedOrg1(selectedOrg1.filter(name => name !== orgName))
+                                  }}
+                                  className="hover:text-green-900 rounded p-0 transition-colors"
+                                  aria-label={`Retirer ${orgName}`}
+                                >
+                                  <X className="h-2 w-2" />
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <div className="relative group flex-shrink-0">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-green-600 z-10 transition-colors duration-200 group-focus-within:text-green-700" />
+                      <Input
+                        placeholder="Rechercher une organisation..."
+                        value={orgSearch1}
+                        onChange={(e) => {
+                          setOrgSearch1(e.target.value)
+                        }}
+                        className="pl-9 sm:pl-10 pr-9 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-green-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg w-full"
+                        style={{ caretColor: '#10B981' }}
+                      />
+                      {orgSearch1 && (
+                        <button
+                          onClick={() => {
+                            setOrgSearch1("")
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-green-400 hover:text-green-600 transition-colors duration-200 z-10"
+                          aria-label="Effacer la recherche"
+                        >
+                          <X className="h-full w-full" />
+                        </button>
+                      )}
+                      {orgSearch1 && filteredOrgs1.length > 0 && (
+                        <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-96 overflow-auto">
+                          {filteredOrgs1.map((org) => (
+                            <button
+                              key={org.displayName}
+                              onClick={() => {
+                                if (!selectedOrg1.includes(org.displayName)) {
+                                  setSelectedOrg1([...selectedOrg1, org.displayName])
+                                  setOrgSearch1("")
+                                }
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="font-medium text-gray-900 text-sm">{org.displayName}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5">
+                                {org.totalAmount.toLocaleString()}&nbsp;€ • {org.count} subsides
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Groupe 2 */}
+                  <div className="space-y-1.5 min-h-[180px] flex flex-col">
+                    {/* Tags des organisations sélectionnées */}
+                    <div className="min-h-[30px] flex flex-wrap gap-1 mb-1">
+                      {selectedOrg2.length > 0 && (
+                        selectedOrg2.map((orgName) => (
+                          <div
+                            key={orgName}
+                            className="flex items-center gap-0.5 text-pink-700 px-1 py-0 text-[9px] font-medium border border-pink-300 rounded"
+                          >
+                            <span className="max-w-[80px] truncate" title={orgName}>
+                              {orgName.length > 12 ? `${orgName.substring(0, 12)}...` : orgName}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setSelectedOrg2(selectedOrg2.filter(name => name !== orgName))
+                              }}
+                              className="hover:text-pink-900 rounded p-0 transition-colors"
+                              aria-label={`Retirer ${orgName}`}
+                            >
+                              <X className="h-2 w-2" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="relative group flex-shrink-0">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-pink-600 z-10 transition-colors duration-200 group-focus-within:text-pink-700" />
+                      <Input
+                        placeholder="Rechercher une organisation..."
+                        value={orgSearch2}
+                        onChange={(e) => {
+                          setOrgSearch2(e.target.value)
+                        }}
+                        className="pl-9 sm:pl-10 pr-9 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-pink-300 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/50 rounded-lg bg-pink-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg w-full"
+                        style={{ caretColor: '#EC4899' }}
+                      />
+                      {orgSearch2 && (
+                        <button
+                          onClick={() => {
+                            setOrgSearch2("")
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-pink-400 hover:text-pink-600 transition-colors duration-200 z-10"
+                          aria-label="Effacer la recherche"
+                        >
+                          <X className="h-full w-full" />
+                        </button>
+                      )}
+                      {orgSearch2 && filteredOrgs2.length > 0 && (
+                        <div className="absolute z-10 w-full bottom-full mb-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-96 overflow-auto">
+                          {filteredOrgs2.map((org) => (
+                            <button
+                              key={org.displayName}
+                              onClick={() => {
+                                if (!selectedOrg2.includes(org.displayName)) {
+                                  setSelectedOrg2([...selectedOrg2, org.displayName])
+                                  setOrgSearch2("")
+                                }
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="font-medium text-gray-900 text-sm">{org.displayName}</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5">
+                                {org.totalAmount.toLocaleString()}&nbsp;€ • {org.count} subsides
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                {/* Graphique combiné (vue d'ensemble) */}
+                {showComparison && org1Data && org2Data && (() => {
+                  // Créer un tableau combiné avec toutes les années
+                  const allYears = ['2019', '2020', '2021', '2022', '2023', '2024']
+                  const combinedData = allYears.map(year => {
+                    const org1YearData = org1Data.yearData.find(d => d.year === year)
+                    const org2YearData = org2Data.yearData.find(d => d.year === year)
+                    return {
+                      year,
+                      [org1Data.name]: org1YearData ? org1YearData['Montant octroyé'] : 0,
+                      [org2Data.name]: org2YearData ? org2YearData['Montant octroyé'] : 0,
+                      org1Count: org1YearData ? org1YearData.count : 0,
+                      org2Count: org2YearData ? org2YearData.count : 0,
+                    }
+                  })
+
+                  return (
+                    <Card className="bg-white border border-gray-200 mt-2">
+                      <CardHeader className="border-b border-gray-100 px-4 py-2">
+                        <CardTitle className="text-sm font-semibold text-gray-800">Vue d&apos;ensemble - Comparaison</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <ChartContainer
+                          config={{
+                            [org1Data.name]: {
+                              label: org1Data.name,
+                              color: "#10B981",
+                            },
+                            [org2Data.name]: {
+                              label: org2Data.name,
+                              color: "#EC4899",
+                            },
+                          }}
+                          className="h-[250px] sm:h-[280px] min-h-[200px] w-full"
+                        >
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+                            <LineChart data={combinedData} margin={{ 
+                              top: 10, 
+                              right: 10, 
+                              left: 0, 
+                              bottom: 5 
+                            }}>
+                              <XAxis 
+                                dataKey="year" 
+                                tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
+                              />
+                              <YAxis 
+                                tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
+                                tickFormatter={(value) => {
+                                  if (value >= 1000000) {
+                                    return `${Math.round(value / 1000000)}M`
+                                  } else if (value >= 1000) {
+                                    return `${Math.round(value / 1000)}K`
+                                  } else {
+                                    return `${Math.round(value)}`
+                                  }
+                                }}
+                              />
+                              <Tooltip 
+                                content={({ active, label }) => {
+                                  if (!active || !label) return null
+                                  
+                                  const yearData = combinedData.find(d => d.year === label)
+                                  if (!yearData) return null
+                                  
+                                  const org1Value = yearData[org1Data.name] as number || 0
+                                  const org2Value = yearData[org2Data.name] as number || 0
+                                  
+                                  // Ne pas afficher si les deux valeurs sont à 0
+                                  if (org1Value === 0 && org2Value === 0) return null
+                                  
+                                  const truncateName = (name: string) => {
+                                    return name.length > 10 ? `${name.substring(0, 10)}...` : name
+                                  }
+                                  
+                                  return (
+                                    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[150px]">
+                                      <div className="text-[10px] font-medium text-gray-600 mb-1.5">
+                                        {label}
+                                      </div>
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[10px] text-gray-600 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]"></span>
+                                            {truncateName(org1Data.name)}
+                                          </span>
+                                          <span className="text-[10px] font-semibold text-gray-900">
+                                            {org1Value.toLocaleString('fr-BE')}&nbsp;€
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[10px] text-gray-600 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[#EC4899]"></span>
+                                            {truncateName(org2Data.name)}
+                                          </span>
+                                          <span className="text-[10px] font-semibold text-gray-900">
+                                            {org2Value.toLocaleString('fr-BE')}&nbsp;€
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                }}
+                              />
+                              <Legend />
+                              <Line 
+                                type="monotone" 
+                                dataKey={org1Data.name} 
+                                stroke="#10B981" 
+                                strokeWidth={3}
+                                dot={{ fill: '#10B981', r: 5 }}
+                                activeDot={{ r: 8 }}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey={org2Data.name} 
+                                stroke="#EC4899" 
+                                strokeWidth={3}
+                                dot={{ fill: '#EC4899', r: 5 }}
+                                activeDot={{ r: 8 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </ChartContainer>
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
+
+                {/* Métriques comparatives */}
+                {showComparison && comparisonMetrics && org1Data && org2Data && (() => {
+                  const formatAmount = (amount: number): string => {
+                    // Utiliser toLocaleString avec fr-BE pour les espaces comme séparateurs de milliers
+                    // Exemple: 1731911655 → "1 731 911 655 €"
+                    return `${Math.round(amount).toLocaleString('fr-BE', { 
+                      minimumFractionDigits: 0, 
+                      maximumFractionDigits: 0 
+                    })} €`
+                  }
+                  
+                  // Fonction pour tronquer le nom si nécessaire
+                  const truncateName = (name: string, maxLength: number = 15) => {
+                    if (!name || typeof name !== 'string') return ''
+                    if (name.length <= maxLength) return name
+                    return name.substring(0, maxLength) + '...'
+                  }
+                  
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mt-4">
+                      <Card className="bg-green-100 border-green-300">
+                        <CardContent className="p-2 sm:p-3 flex flex-col items-center justify-center text-center min-h-[100px] sm:min-h-[110px]">
+                          <div className="text-[10px] sm:text-xs text-green-700 font-medium mb-1 sm:mb-1.5 break-words px-1">
+                            {truncateName(org1Data.name, 20)}
+                          </div>
+                          <div className="text-xs sm:text-sm font-bold text-green-800 leading-tight break-words px-1">
+                            {formatAmount(comparisonMetrics.org1Total)}
+                          </div>
+                          <div className="text-[9px] sm:text-[10px] text-green-600 mt-1 sm:mt-1.5">
+                            <span className="hidden sm:inline">Moyenne/an: </span>
+                            <span className="sm:hidden">Moy/an: </span>
+                            {formatAmount(comparisonMetrics.org1AvgPerYear)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-pink-100 border-pink-300">
+                        <CardContent className="p-2 sm:p-3 flex flex-col items-center justify-center text-center min-h-[100px] sm:min-h-[110px]">
+                          <div className="text-[10px] sm:text-xs text-pink-700 font-medium mb-1 sm:mb-1.5 break-words px-1">
+                            {truncateName(org2Data.name, 20)}
+                          </div>
+                          <div className="text-xs sm:text-sm font-bold text-pink-800 leading-tight break-words px-1">
+                            {formatAmount(comparisonMetrics.org2Total)}
+                          </div>
+                          <div className="text-[9px] sm:text-[10px] text-pink-600 mt-1 sm:mt-1.5">
+                            <span className="hidden sm:inline">Moyenne/an: </span>
+                            <span className="sm:hidden">Moy/an: </span>
+                            {formatAmount(comparisonMetrics.org2AvgPerYear)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gray-50 border-gray-200">
+                        <CardContent className="p-2 sm:p-3 flex flex-col items-center justify-center text-center min-h-[100px] sm:min-h-[110px]">
+                          <div className="text-[10px] sm:text-xs text-gray-600 font-medium mb-1 sm:mb-1.5">Différence absolue</div>
+                          <div className={`text-xs sm:text-sm font-bold leading-tight break-words px-1 ${comparisonMetrics.totalDifference > 0 ? 'text-pink-700' : comparisonMetrics.totalDifference < 0 ? 'text-green-700' : 'text-gray-900'}`}>
+                            {comparisonMetrics.totalDifference > 0 ? '+' : ''}
+                            {formatAmount(comparisonMetrics.totalDifference)}
+                          </div>
+                          <div className="text-[9px] sm:text-[10px] text-gray-600 mt-1 sm:mt-1.5 px-1">
+                            {comparisonMetrics.totalDifference > 0 
+                              ? `${truncateName(org2Data.name, 15)} reçoit plus`
+                              : comparisonMetrics.totalDifference < 0
+                              ? `${truncateName(org1Data.name, 15)} reçoit plus`
+                              : 'Montants identiques'}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gray-50 border-gray-200">
+                        <CardContent className="p-2 sm:p-3 flex flex-col items-center justify-center text-center min-h-[100px] sm:min-h-[110px]">
+                          <div className="text-[10px] sm:text-xs text-gray-600 font-medium mb-1 sm:mb-1.5">
+                            Comparaison relative
+                          </div>
+                          {comparisonMetrics.useRatio ? (
+                            <>
+                              <div className="text-xs sm:text-sm font-bold leading-tight text-gray-900 px-1">
+                                {comparisonMetrics.ratio.toFixed(1)}×
+                              </div>
+                              <div className="text-[9px] sm:text-[10px] text-gray-600 mt-1 sm:mt-1.5 font-medium leading-relaxed px-1">
+                                {comparisonMetrics.org2ReceivesMore ? (
+                                  <span>
+                                    <span className="text-pink-600 font-semibold">{truncateName(org2Data.name, 12)}</span>
+                                    <span className="text-gray-600"> reçoit </span>
+                                    <span className="text-gray-700 font-semibold">{comparisonMetrics.ratio.toFixed(1)}×</span>
+                                    <span className="text-gray-600"> plus que </span>
+                                    <span className="text-green-600 font-semibold">{truncateName(org1Data.name, 12)}</span>
+                                  </span>
+                                ) : (
+                                  <span>
+                                    <span className="text-green-600 font-semibold">{truncateName(org1Data.name, 12)}</span>
+                                    <span className="text-gray-600"> reçoit </span>
+                                    <span className="text-gray-700 font-semibold">{comparisonMetrics.ratio.toFixed(1)}×</span>
+                                    <span className="text-gray-600"> plus que </span>
+                                    <span className="text-pink-600 font-semibold">{truncateName(org2Data.name, 12)}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className={`text-xs sm:text-sm font-bold leading-tight ${comparisonMetrics.org2ReceivesMore ? 'text-pink-700' : comparisonMetrics.org1ReceivesMore ? 'text-green-700' : 'text-gray-700'}`}>
+                                {comparisonMetrics.totalPercentageDiff > 0 ? '+' : ''}
+                                {comparisonMetrics.totalPercentageDiff.toFixed(1)}%
+                              </div>
+                              <div className="text-[9px] sm:text-[10px] text-gray-600 mt-1 sm:mt-1.5 font-medium leading-relaxed px-1">
+                                {comparisonMetrics.org2ReceivesMore ? (
+                                  <span>
+                                    <span className="text-pink-600 font-semibold">{truncateName(org2Data.name, 12)}</span>
+                                    <span className="text-gray-600"> reçoit </span>
+                                    <span className="text-gray-700 font-semibold">{comparisonMetrics.totalPercentageDiff.toFixed(1)}%</span>
+                                    <span className="text-gray-600"> de plus que </span>
+                                    <span className="text-green-600 font-semibold">{truncateName(org1Data.name, 12)}</span>
+                                  </span>
+                                ) : comparisonMetrics.org1ReceivesMore ? (
+                                  <span>
+                                    <span className="text-green-600 font-semibold">{truncateName(org1Data.name, 12)}</span>
+                                    <span className="text-gray-600"> reçoit </span>
+                                    <span className="text-gray-700 font-semibold">{Math.abs(comparisonMetrics.totalPercentageDiff).toFixed(1)}%</span>
+                                    <span className="text-gray-600"> de plus que </span>
+                                    <span className="text-pink-600 font-semibold">{truncateName(org2Data.name, 12)}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-600">
+                                    Les deux groupes ont reçu le même montant
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )
+                })()}
+
+                {/* Graphiques d'évolution temporelle séparés */}
+                {showComparison && org1Data && org2Data && (
+                  <div className="grid grid-cols-1 gap-6 mt-6">
+                    {/* Graphique Groupe 1 */}
+                    <Card className="bg-green-50 border-green-200">
+                      <CardHeader className="border-b border-green-300 px-4 py-3">
+                        <CardTitle className="text-sm font-semibold text-green-800">{org1Data.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <ChartContainer
+                          config={{
+                            'Montant octroyé': {
+                              label: "Montant octroyé",
+                              color: "#10B981",
+                            },
+                          }}
+                          className="h-[250px] sm:h-[280px] min-h-[200px] w-full"
+                        >
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+                            <LineChart data={org1Data.yearData} margin={{ 
+                              top: 10, 
+                              right: 10, 
+                              left: 0, 
+                              bottom: 5 
+                            }}>
+                              <XAxis 
+                                dataKey="year" 
+                                tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
+                              />
+                              <YAxis 
+                                tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
+                                tickFormatter={(value) => {
+                                  if (value >= 1000000) {
+                                    return `${Math.round(value / 1000000)}M`
+                                  } else if (value >= 1000) {
+                                    return `${Math.round(value / 1000)}K`
+                                  } else {
+                                    return `${Math.round(value)}`
+                                  }
+                                }}
+                              />
+                              <Tooltip 
+                                content={<CustomTooltip 
+                                formatter={(value, name) => {
+                                  return [
+                                    `${Number(value).toLocaleString()} €`,
+                                    name || ''
+                                  ]
+                                }}
+                                labelFormatter={(label) => `Année ${label}`}
+                                />}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey="Montant octroyé" 
+                                stroke="#10B981" 
+                                strokeWidth={3}
+                                dot={{ fill: '#10B981', r: 5 }}
+                                activeDot={{ r: 8 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </ChartContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Graphique Groupe 2 */}
+                    <Card className="bg-pink-50 border-pink-200">
+                      <CardHeader className="border-b border-pink-300 px-4 py-3">
+                        <CardTitle className="text-sm font-semibold text-pink-800">{org2Data.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <ChartContainer
+                          config={{
+                            'Montant octroyé': {
+                              label: "Montant octroyé",
+                              color: "#EC4899",
+                            },
+                          }}
+                          className="h-[250px] sm:h-[280px] min-h-[200px] w-full"
+                        >
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+                            <LineChart data={org2Data.yearData} margin={{ 
+                              top: 10, 
+                              right: 10, 
+                              left: 0, 
+                              bottom: 5 
+                            }}>
+                              <XAxis 
+                                dataKey="year" 
+                                tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
+                              />
+                              <YAxis 
+                                tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
+                                tickFormatter={(value) => {
+                                  if (value >= 1000000) {
+                                    return `${Math.round(value / 1000000)}M`
+                                  } else if (value >= 1000) {
+                                    return `${Math.round(value / 1000)}K`
+                                  } else {
+                                    return `${Math.round(value)}`
+                                  }
+                                }}
+                              />
+                              <Tooltip 
+                                content={<CustomTooltip 
+                                formatter={(value, name) => {
+                                  return [
+                                    `${Number(value).toLocaleString()} €`,
+                                    name || ''
+                                  ]
+                                }}
+                                labelFormatter={(label) => `Année ${label}`}
+                                />}
+                              />
+                              <Line 
+                                type="monotone" 
+                                dataKey="Montant octroyé" 
+                                stroke="#EC4899" 
+                                strokeWidth={3}
+                                dot={{ fill: '#EC4899', r: 5 }}
+                                activeDot={{ r: 8 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </ChartContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            )}
+
+            {/* Vue Global (comparaison entre années) */}
+            {comparisonView === "global" && (
+            <div className="space-y-6">
             {/* Indicateurs de tendance */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {yearComparisonData.slice(-4).map((data, index) => {
@@ -1041,11 +2032,11 @@ export default function AnalysePage() {
                         tick={{ fontSize: responsiveProps.tickFontSize, fill: '#6B7280' }}
                         tickFormatter={(value) => {
                           if (value >= 1000000) {
-                            return `${(value / 1000000).toFixed(1)}M€`
+                            return `${Math.round(value / 1000000)}M`
                           } else if (value >= 1000) {
-                            return `${(value / 1000).toFixed(0)}K€`
+                            return `${Math.round(value / 1000)}K`
                           } else {
-                            return `${value.toLocaleString()}€`
+                            return `${Math.round(value)}`
                           }
                         }}
                       />
@@ -1220,6 +2211,8 @@ export default function AnalysePage() {
                 </div>
               </CardContent>
             </Card>
+            )}
+            </div>
             )}
           </TabsContent>
         </Tabs>

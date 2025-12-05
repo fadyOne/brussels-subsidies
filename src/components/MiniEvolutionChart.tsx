@@ -84,11 +84,11 @@ export const MiniEvolutionChart: React.FC<MiniEvolutionChartProps> = ({
   // Formater le montant de la dernière année
   const formatAmount = (amount: number) => {
     if (amount >= 1000000) {
-      return `${(amount / 1000000).toFixed(1)}M€`
+      return `${(amount / 1000000).toFixed(1)} M€`
     } else if (amount >= 1000) {
-      return `${(amount / 1000).toFixed(0)}K€`
+      return `${(amount / 1000).toFixed(0)} K€`
     }
-    return `${amount.toLocaleString('fr-FR')}€`
+    return `${amount.toLocaleString('fr-FR')} €`
   }
 
   return (
