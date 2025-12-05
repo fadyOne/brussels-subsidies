@@ -92,7 +92,7 @@ export const Top10ListChart: React.FC<Top10ListChartProps> = ({
                 </div>
                 {responsiveProps.isMobile && (
                   <div className="text-sm text-gray-600 mt-1">
-                    {item.totalAmount.toLocaleString()} € ({percentage}%)
+                    {item.totalAmount.toLocaleString()}&nbsp;€ ({percentage}%)
                   </div>
                 )}
               </div>
@@ -115,7 +115,7 @@ export const Top10ListChart: React.FC<Top10ListChartProps> = ({
               {!responsiveProps.isMobile && (
                 <div className="flex-shrink-0 text-right min-w-[120px]">
                   <div className="font-semibold text-gray-900">
-                    {item.totalAmount.toLocaleString()} €
+                    {item.totalAmount.toLocaleString()}&nbsp;€
                   </div>
                   <div className="text-sm text-gray-600">
                     {percentage}%

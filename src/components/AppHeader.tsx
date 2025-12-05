@@ -45,7 +45,8 @@ export function AppHeader({
               <div className="flex flex-col xs:flex-row flex-wrap items-start xs:items-center gap-2 xs:gap-3">
                 {totalAmount !== undefined && (
                   <Badge className="text-gray-800 border-0 px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 font-bold text-sm sm:text-base md:text-lg" style={{ backgroundColor: '#A7F3D0', borderColor: '#6EE7B7' }}>
-                    {formatNumberWithSpaces(totalAmount)} €
+                    <span>{formatNumberWithSpaces(totalAmount)}</span>
+                    <span className="ml-2">€</span>
                   </Badge>
                 )}
                 {totalSubsides !== undefined && (
@@ -63,14 +64,14 @@ export function AppHeader({
           {/* Zone droite : Logo (3-4x plus grand) - bien aligné à droite avec animation radar */}
           <div className="flex-shrink-0 flex items-center">
             <div className="radar-container relative">
-              <Image
-                src="/images/image-6-removebg-preview.png"
-                alt="Subsides Radar Logo"
-                width={160}
-                height={160}
+            <Image
+              src="/images/image-6-removebg-preview.png"
+              alt="Subsides Radar Logo"
+              width={160}
+              height={160}
                 className="w-[83px] h-[83px] sm:w-[125px] sm:h-[125px] md:w-[166px] md:h-[166px] object-contain relative z-10"
-                priority
-              />
+              priority
+            />
               <div className="radar-sweep">
                 <div className="radar-circle"></div>
                 <div className="radar-circle"></div>

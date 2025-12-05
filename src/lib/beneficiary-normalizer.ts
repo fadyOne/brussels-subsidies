@@ -42,14 +42,23 @@ export function normalizeBeneficiaryName(name: string): string {
   // 4. Supprimer tous les caractères non-alphanumériques (sauf espaces)
   normalized = normalized.replace(/[^a-z0-9\s]/g, ' ')
   
-  // 5. Supprimer les mots communs qui n'apportent pas d'information
+  // 5. Supprimer les suffixes légaux courants (ASBL, VZW, SCRL, etc.) pour améliorer le regroupement
+  // Ces suffixes sont souvent omis ou varient, donc on les ignore pour le regroupement
+  const legalSuffixes = ['asbl', 'vzw', 'scrl', 'sprl', 'sa', 'nv', 'bv', 'cv', 'sc', 'srl', 'bvba', 'cvba']
+  legalSuffixes.forEach(suffix => {
+    // Supprimer le suffixe s'il est à la fin du nom
+    const suffixRegex = new RegExp(`\\s+${suffix}\\s*$`, 'i')
+    normalized = normalized.replace(suffixRegex, '')
+  })
+  
+  // 6. Supprimer les mots communs qui n'apportent pas d'information
   const stopWords = ['de', 'du', 'la', 'le', 'les', 'des', 'van', 'der', 'den', 'het', 'een', 'the', 'of', 'and']
   const words = normalized.split(/\s+/).filter(word => 
     word.length > 0 && !stopWords.includes(word)
   )
   normalized = words.join(' ')
   
-  // 6. Normaliser les espaces multiples
+  // 7. Normaliser les espaces multiples
   normalized = normalized.replace(/\s+/g, ' ').trim()
   
   return normalized
@@ -175,42 +184,45 @@ export function groupByBCE(subsides: Subside[]): Map<string, BeneficiaryGroup> {
 /**
  * Combine le regroupement par normalisation et par BCE
  * 
- * Priorité : BCE > Normalisation
- * Si un bénéficiaire a un BCE, il est regroupé par BCE.
- * Sinon, il est regroupé par nom normalisé.
+ * ⚠️ PRIORITÉ INVERSE : Nom normalisé > BCE
+ * Les numéros BCE ne sont pas fiables (ex: "Seven Shelters" a 2 BCE différents).
+ * On regroupe d'abord par nom normalisé, puis on utilise les BCE comme information supplémentaire.
  * 
  * @param subsides - Liste des subsides à analyser
  * @returns Map avec les groupes de bénéficiaires
  */
 export function groupBeneficiaries(subsides: Subside[]): Map<string, BeneficiaryGroup> {
-  const bceGroups = groupByBCE(subsides)
   const normalizedGroups = groupByNormalizedName(subsides)
+  const bceGroups = groupByBCE(subsides)
   const finalGroups = new Map<string, BeneficiaryGroup>()
   
-  // Créer un Set des noms déjà dans un groupe BCE pour vérification rapide
-  const namesInBCEGroups = new Set<string>()
-  bceGroups.forEach((group) => {
-    group.originalNames.forEach(name => namesInBCEGroups.add(name))
+  // Créer un Set des noms déjà dans un groupe normalisé pour vérification rapide
+  const namesInNormalizedGroups = new Set<string>()
+  normalizedGroups.forEach((group) => {
+    group.originalNames.forEach(name => namesInNormalizedGroups.add(name))
   })
   
-  // D'abord, ajouter tous les groupes avec BCE (priorité)
-  bceGroups.forEach((group, bceKey) => {
-    finalGroups.set(`bce:${bceKey}`, group)
-  })
-  
-  // Ensuite, ajouter les groupes sans BCE (regroupés par normalisation)
+  // D'abord, ajouter tous les groupes par nom normalisé (PRIORITÉ)
   normalizedGroups.forEach((group, normalizedKey) => {
-    // Ignorer si un des noms originaux est déjà dans un groupe BCE
+    finalGroups.set(`norm:${normalizedKey}`, group)
+  })
+  
+  // Ensuite, ajouter les groupes avec BCE uniquement s'ils ne sont pas déjà dans un groupe normalisé
+  // (pour les cas où un bénéficiaire a un BCE mais n'a pas de nom normalisé correspondant)
+  bceGroups.forEach((group, bceKey) => {
+    // Vérifier si un des noms de ce groupe BCE est déjà dans un groupe normalisé
     let alreadyGrouped = false
     for (const name of group.originalNames) {
-      if (namesInBCEGroups.has(name)) {
+      if (namesInNormalizedGroups.has(name)) {
         alreadyGrouped = true
         break
       }
     }
     
+    // Si pas déjà groupé par nom normalisé, ajouter le groupe BCE
+    // (cas rare : bénéficiaire avec BCE mais nom non normalisable)
     if (!alreadyGrouped) {
-      finalGroups.set(`norm:${normalizedKey}`, group)
+      finalGroups.set(`bce:${bceKey}`, group)
     }
   })
   

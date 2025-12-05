@@ -1,4 +1,4 @@
-# Téléchargement des PDFs - Listes de Subsides (2019-2025)
+# Téléchargement des PDFs - Listes de Subsides (2019-2024)
 
 ## 📋 Résumé
 
@@ -47,7 +47,7 @@ Ces fichiers peuvent contenir des subsides mais dans des formats différents :
 
 ## 📥 Stratégie de Téléchargement
 
-### Pour les Années 2019-2025
+### Pour les Années 2019-2024
 
 **Pattern à rechercher :**
 - `*Liste*Transfert*Budget*`
@@ -117,7 +117,7 @@ scripts/pdf-downloader/
 
 ```json
 {
-  "years": [2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  "years": [2019, 2020, 2021, 2022, 2023, 2024],
   "patterns": [
     "*Liste*Transfert*Budget*",
     "*Liste*des*Transferts*Budget*"
@@ -167,7 +167,7 @@ Ce script extrait :
 - [ ] Créer le validateur de contenu
 - [ ] Générer les rapports de téléchargement
 - [ ] Tester sur une année (ex: 2024)
-- [ ] Traiter toutes les années 2019-2025
+- [ ] Traiter toutes les années 2019-2024
 - [ ] Extraire les données avec `extract-subsidies-simple.js`
 - [ ] Générer les fichiers `data-YYYY.json` finaux
 

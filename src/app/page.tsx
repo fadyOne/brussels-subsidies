@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Building, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Share2 } from "lucide-react"
+import { AlertCircle, Building, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Share2, Link2 } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
 import { AppFooter } from "@/components/AppFooter"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -26,6 +26,7 @@ import { getCachedData, setCachedData } from '@/lib/cache'
 import { categorizeSubside } from '@/lib/category-config'
 import { loadFilterPreset, generateHash, normalizeForHash } from '@/lib/filter-presets'
 import { devLog, devWarn, devError, formatNumberWithSpaces } from '@/lib/utils'
+import { detectRelationships, type OrganizationRelationship } from '@/lib/organization-relationships'
 
 // Fonction pour obtenir le schéma de couleurs selon l'année (hors composant pour performance)
 const getYearColorScheme = (year: string) => {
@@ -124,29 +125,34 @@ export default function SubsidesDashboard() {
   const [selectedColumns, setSelectedColumns] = useState<ExportColumn[]>(DEFAULT_COLUMNS)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [presetLoaded, setPresetLoaded] = useState(false) // Prevent multiple loads
+  const [openDialogIndex, setOpenDialogIndex] = useState<number | null>(null) // Contrôle l'ouverture du Dialog
 
   // Fonction pour détecter automatiquement les années disponibles
+  // Optimisée : ne fait pas de requêtes HEAD séquentielles qui ralentissent le chargement
   const getAvailableYears = useCallback(async (): Promise<string[]> => {
     try {
-      // Liste des années possibles (étendue pour couvrir plus de cas)
-      // Limiter aux années qui existent réellement pour éviter les 404
+      // Liste des années possibles
       const possibleYears = ["2024", "2023", "2022", "2021", "2020", "2019"]
       const years: string[] = ["all"]
       
-      // Vérifier chaque année possible
-      for (const year of possibleYears) {
+      // Vérifier toutes les années en parallèle pour plus de rapidité
+      const yearChecks = possibleYears.map(async (year) => {
         try {
           const response = await fetch(`/data-${year}.json`, { method: 'HEAD' })
           if (response.ok) {
-            years.push(year)
-            devLog(` Fichier data-${year}.json trouvé`)
+            return year
           }
         } catch {
-          // Fichier n'existe pas, continuer silencieusement
+          // Fichier n'existe pas
         }
-      }
+        return null
+      })
       
-      devLog(`📅 ${years.length - 1} années de données détectées:`, years.slice(1))
+      const results = await Promise.all(yearChecks)
+      const foundYears = results.filter((year): year is string => year !== null)
+      years.push(...foundYears)
+      
+      devLog(`📅 ${foundYears.length} années de données détectées:`, foundYears)
       return years
     } catch (error) {
       devError("Erreur lors de la détection des années:", error)
@@ -548,6 +554,68 @@ export default function SubsidesDashboard() {
       .slice(-6) // Garder les 6 dernières années max pour le mini-graphique
   }, [filteredSubsides])
 
+  // Détection des relations entre organisations (calculé de manière asynchrone pour ne pas bloquer)
+  const [organizationRelationships, setOrganizationRelationships] = useState<Map<string, OrganizationRelationship[]>>(new Map())
+
+  // Calculer les relations de manière asynchrone après le chargement initial
+  useEffect(() => {
+    if (subsides.length === 0) {
+      setOrganizationRelationships(new Map())
+      return
+    }
+
+    // Différer le calcul pour ne pas bloquer le rendu initial
+    // Utiliser requestIdleCallback si disponible, sinon setTimeout
+    const scheduleCalculation = () => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+          calculateRelationships()
+        }, { timeout: 2000 }) // Timeout de 2s pour forcer l'exécution si nécessaire
+      } else {
+        // Fallback pour les navigateurs sans requestIdleCallback
+        setTimeout(() => {
+          calculateRelationships()
+        }, 100) // Démarrer après 100ms
+      }
+    }
+
+    const calculateRelationships = () => {
+      try {
+        devLog('🔍 Calcul des relations entre organisations...')
+        const relationships = detectRelationships(subsides, 0.6)
+        
+        // Créer un Map pour accès rapide : orgName -> relations
+        const relationshipsMap = new Map<string, OrganizationRelationship[]>()
+        
+        relationships.forEach(rel => {
+          // Ajouter pour l'organisation source
+          if (!relationshipsMap.has(rel.sourceOrg)) {
+            relationshipsMap.set(rel.sourceOrg, [])
+          }
+          relationshipsMap.get(rel.sourceOrg)!.push(rel)
+          
+          // Ajouter pour l'organisation cible (relations bidirectionnelles)
+          if (!relationshipsMap.has(rel.targetOrg)) {
+            relationshipsMap.set(rel.targetOrg, [])
+          }
+          relationshipsMap.get(rel.targetOrg)!.push({
+            ...rel,
+            sourceOrg: rel.targetOrg,
+            targetOrg: rel.sourceOrg
+          })
+        })
+        
+        setOrganizationRelationships(relationshipsMap)
+        devLog(`✅ Relations calculées: ${relationships.length} relations détectées`)
+      } catch (error) {
+        devError("Erreur lors de la détection des relations:", error)
+        setOrganizationRelationships(new Map())
+      }
+    }
+
+    scheduleCalculation()
+  }, [subsides])
+
 
   if (loading) {
     return <LoadingScreen />
@@ -626,7 +694,7 @@ export default function SubsidesDashboard() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-green-600 z-10 transition-colors duration-200 group-focus-within:text-green-700" />
                     <Input
-                        placeholder="Rechercher un bénéficiaire, projet..."
+                        placeholder="bénéficiaire, projet..."
                       value={searchTerm}
                       onChange={(e) => {
                         const value = e.target.value
@@ -637,7 +705,7 @@ export default function SubsidesDashboard() {
                       }}
                       maxLength={24}
                         className="pl-9 sm:pl-10 pr-8 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-green-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg"
-                        aria-label="Rechercher un bénéficiaire, projet ou numéro de dossier"
+                        aria-label="bénéficiaire, projet ou numéro de dossier"
                         style={{ caretColor: '#10b981' }}
                       />
                     {searchTerm && (
@@ -1012,23 +1080,42 @@ export default function SubsidesDashboard() {
                   const year = subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend
                   const colorScheme = getYearColorScheme(year)
                   
+                const dialogKey = `${subside.nom_de_la_subvention_naam_van_de_subsidie}-${subside.beneficiaire_begunstigde}-${subside.article_complet_volledig_artikel}-${index}`
+                const isDialogOpen = openDialogIndex === index
+                
                 return (
-                <Dialog key={`${subside.nom_de_la_subvention_naam_van_de_subsidie}-${subside.beneficiaire_begunstigde}-${subside.article_complet_volledig_artikel}-${index}`}>
+                <Dialog 
+                  key={dialogKey}
+                  open={isDialogOpen}
+                  onOpenChange={(open) => {
+                    setOpenDialogIndex(open ? index : null)
+                  }}
+                >
                   <DialogTrigger asChild>
                     <div className={`border-2 rounded-lg p-2.5 sm:p-3 hover:shadow-lg cursor-pointer transition-all bg-white/90 backdrop-blur-sm ${colorScheme.border} ${colorScheme.hoverBorder} ${colorScheme.hoverBg}`}>
                       
-                      {/* Nom du bénéficiaire */}
-                      <h3 
-                        className="font-semibold text-xs sm:text-sm text-blue-900 mb-1.5 sm:mb-2 line-clamp-1"
-                        title={subside.beneficiaire_begunstigde}
-                      >
-                        {subside.beneficiaire_begunstigde}
-                      </h3>
+                      {/* Nom du bénéficiaire avec badge de relation */}
+                      <div className="flex items-start gap-1.5 mb-1.5 sm:mb-2">
+                        <h3 
+                          className="font-semibold text-xs sm:text-sm text-blue-900 line-clamp-1 flex-1"
+                          title={subside.beneficiaire_begunstigde}
+                        >
+                          {subside.beneficiaire_begunstigde}
+                        </h3>
+                        {organizationRelationships.has(subside.beneficiaire_begunstigde) && (
+                          <div 
+                            className="flex-shrink-0 mt-0.5"
+                            title={`Relation détectée avec ${organizationRelationships.get(subside.beneficiaire_begunstigde)!.map(r => r.targetOrg).join(', ')}`}
+                          >
+                            <Link2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 hover:text-blue-700" />
+                          </div>
+                        )}
+                      </div>
                       
                       {/* Montant - Plus discret, sans Badge */}
                       <div className="mb-1.5 sm:mb-2">
                         <span className="text-xs sm:text-sm text-gray-600 font-medium">
-                          {formatNumberWithSpaces(subside.montant_octroye_toegekend_bedrag)} €
+                          {formatNumberWithSpaces(subside.montant_octroye_toegekend_bedrag)}&nbsp;€
                         </span>
                       </div>
                       
@@ -1048,7 +1135,19 @@ export default function SubsidesDashboard() {
                     <div className={`bg-gradient-to-r ${colorScheme.bgFrom} ${colorScheme.bgTo} rounded-t-lg px-4 sm:px-6 py-3 sm:py-4 border-b-2 ${colorScheme.border}`}>
                       <DialogHeader className="space-y-1 sm:space-y-2 pt-2 sm:pt-3">
                         <DialogTitle className="text-sm sm:text-base text-blue-900 font-light line-clamp-2" style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
-                          <span className="break-words">{subside.beneficiaire_begunstigde}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // Fermer le Dialog
+                              setOpenDialogIndex(null)
+                              // Appliquer le filtre de recherche
+                              setSearchTerm(subside.beneficiaire_begunstigde)
+                            }}
+                            className="text-left break-words text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
+                            title={`Voir tous les subsides de ${subside.beneficiaire_begunstigde}`}
+                          >
+                            {subside.beneficiaire_begunstigde}
+                          </button>
                         </DialogTitle>
                         <DialogDescription className="sr-only">
                           Détails du subside pour {subside.beneficiaire_begunstigde} en {year}
@@ -1138,14 +1237,14 @@ export default function SubsidesDashboard() {
                               <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
                                   <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Montant octroyé</h5>
                                 <p className={`text-lg sm:text-xl md:text-2xl font-bold ${colorScheme.text}`}>
-                            {formatNumberWithSpaces(subside.montant_octroye_toegekend_bedrag)} €
+                            {formatNumberWithSpaces(subside.montant_octroye_toegekend_bedrag)}&nbsp;€
                           </p>
                         </div>
                               {subside.montant_octroye_toegekend_bedrag !== subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023 && (
                               <div className={`bg-white rounded-lg p-3 sm:p-4 border ${colorScheme.border} shadow-sm`}>
                                   <h5 className="font-medium text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Montant prévu au budget</h5>
                                   <p className={`text-base sm:text-lg font-semibold ${colorScheme.text}`}>
-                              {formatNumberWithSpaces(subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023)} €
+                              {formatNumberWithSpaces(subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023)}&nbsp;€
                             </p>
                           </div>
                               )}
@@ -1179,6 +1278,55 @@ export default function SubsidesDashboard() {
                             <p className={`font-mono text-sm sm:text-base ${colorScheme.text} font-semibold`}>{subside.article_complet_volledig_artikel}</p>
                           </div>
                       </div>
+
+                            {/* Relations avec d'autres organisations */}
+                            {organizationRelationships.has(subside.beneficiaire_begunstigde) && (
+                              <div className="space-y-2 sm:space-y-3">
+                                <h4 className={`font-light text-sm sm:text-base ${colorScheme.text}`} style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}>
+                                  Relations détectées
+                                </h4>
+                                <div className={`bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200 shadow-sm space-y-3`}>
+                                  {organizationRelationships.get(subside.beneficiaire_begunstigde)!.map((rel, relIndex) => (
+                                    <div key={relIndex} className="border-b border-blue-200 last:border-b-0 pb-3 last:pb-0">
+                                      <div className="flex items-start gap-2 mb-2">
+                                        <Link2 className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setOpenDialogIndex(null)
+                                              setSearchTerm(rel.targetOrg)
+                                            }}
+                                            className="text-sm sm:text-base font-semibold text-blue-700 hover:text-blue-900 hover:underline cursor-pointer transition-colors text-left"
+                                          >
+                                            {rel.targetOrg}
+                                          </button>
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 text-blue-700">
+                                              {Math.round(rel.confidence * 100)}% confiance
+                                            </Badge>
+                                            <span className="text-xs text-gray-600">
+                                              {rel.mentionCount} mention{rel.mentionCount > 1 ? 's' : ''} • {rel.years.join(', ')}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {rel.contexts.length > 0 && (
+                                        <div className="mt-2 pl-6 space-y-1">
+                                          <p className="text-xs font-medium text-gray-600 mb-1">Contexte :</p>
+                                          {rel.contexts.slice(0, 2).map((context, ctxIndex) => (
+                                            <div key={ctxIndex} className="text-xs text-gray-700 bg-white rounded p-2 border border-gray-200">
+                                              <p className="line-clamp-2">{context.objet}</p>
+                                              <p className="text-[10px] text-gray-500 mt-1">{context.annee} • {formatNumberWithSpaces(context.montant)} €</p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                     </div>
                     </div>
                   </DialogContent>
