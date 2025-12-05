@@ -126,8 +126,8 @@ export const MiniEvolutionChart: React.FC<MiniEvolutionChartProps> = ({
       </div>
       
       {/* Graphique */}
-      <div style={{ width: '100%', height: isMobile ? '40px' : `${height}px`, position: 'relative' }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div style={{ width: '100%', height: isMobile ? '40px' : `${height}px`, position: 'relative', minHeight: isMobile ? '40px' : `${height}px` }}>
+        <ResponsiveContainer width="100%" height="100%" minHeight={isMobile ? 40 : height}>
           <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
             <XAxis 
               dataKey="label" 

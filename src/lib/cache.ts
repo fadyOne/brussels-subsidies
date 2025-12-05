@@ -245,3 +245,169 @@ export function hasCachedData(year: string): boolean {
   return getCachedData(year) !== null
 }
 
+// ============================================================================
+// Cache des résultats de calculs lourds (Solution 3 - Performance)
+// ============================================================================
+
+const COMPUTED_CACHE_PREFIX = 'brussels_subsidies_computed_v1.0.0'
+const COMPUTED_CACHE_TTL = 60 * 60 * 1000 // 1 heure
+
+interface ComputedCacheEntry<T> {
+  data: T
+  timestamp: number
+  dataHash: string // Hash des données sources pour invalidation
+}
+
+/**
+ * Génère un hash simple des données pour détecter les changements
+ */
+function generateDataHash(data: unknown[]): string {
+  // Hash simple basé sur la longueur et quelques propriétés
+  // Pour un hash plus robuste, on pourrait utiliser crypto.subtle
+  const length = data.length
+  const sample = data.slice(0, 10).map((item: unknown) => {
+    if (typeof item === 'object' && item !== null) {
+      const obj = item as Record<string, unknown>
+      return `${Object.keys(obj).length}-${JSON.stringify(obj).substring(0, 50)}`
+    }
+    return String(item)
+  }).join('|')
+  
+  return `${length}-${sample.substring(0, 100)}`
+}
+
+/**
+ * Récupère un résultat de calcul depuis le cache
+ * 
+ * @param cacheKey - Clé unique pour ce type de calcul (ex: 'topGlobalBeneficiaries')
+ * @param dataHash - Hash des données sources pour vérifier la validité
+ * @returns Les données en cache ou null si non disponibles/expirées
+ */
+export function getCachedComputation<T>(cacheKey: string, dataHash: string): T | null {
+  if (!isLocalStorageAvailable()) {
+    return null
+  }
+
+  try {
+    const key = `${COMPUTED_CACHE_PREFIX}_${cacheKey}`
+    const cached = localStorage.getItem(key)
+    
+    if (!cached) {
+      return null
+    }
+
+    const entry: ComputedCacheEntry<T> = JSON.parse(cached)
+
+    // Vérifier l'expiration
+    const now = Date.now()
+    if (now - entry.timestamp > COMPUTED_CACHE_TTL) {
+      localStorage.removeItem(key)
+      return null
+    }
+
+    // Vérifier que les données sources n'ont pas changé
+    if (entry.dataHash !== dataHash) {
+      localStorage.removeItem(key)
+      return null
+    }
+
+    console.log(`✅ Cache computation hit: ${cacheKey}`)
+    return entry.data
+  } catch (error) {
+    console.warn(`⚠️ Erreur récupération cache computation ${cacheKey}:`, error)
+    return null
+  }
+}
+
+/**
+ * Stocke un résultat de calcul dans le cache
+ * 
+ * @param cacheKey - Clé unique pour ce type de calcul
+ * @param data - Les données calculées à mettre en cache
+ * @param sourceData - Les données sources pour générer le hash
+ * @returns true si le stockage a réussi
+ */
+export function setCachedComputation<T>(
+  cacheKey: string,
+  data: T,
+  sourceData: unknown[]
+): boolean {
+  if (!isLocalStorageAvailable()) {
+    return false
+  }
+
+  try {
+    const dataHash = generateDataHash(sourceData)
+    const entry: ComputedCacheEntry<T> = {
+      data,
+      timestamp: Date.now(),
+      dataHash,
+    }
+
+    const key = `${COMPUTED_CACHE_PREFIX}_${cacheKey}`
+    const entryJson = JSON.stringify(entry)
+    
+    // Vérifier la taille (limite de sécurité)
+    const estimatedSize = new Blob([entryJson]).size
+    const MAX_SIZE = 2 * 1024 * 1024 // 2MB par entrée
+
+    if (estimatedSize > MAX_SIZE) {
+      console.warn(`⚠️ Résultat de calcul trop volumineux pour le cache (${(estimatedSize / 1024 / 1024).toFixed(2)}MB)`)
+      return false
+    }
+
+    localStorage.setItem(key, entryJson)
+    console.log(`💾 Cache computation mis à jour: ${cacheKey} (${(estimatedSize / 1024).toFixed(2)}KB)`)
+    return true
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      // Nettoyer les anciens caches de calculs
+      clearComputedCache()
+      // Réessayer une fois
+      try {
+        const dataHash = generateDataHash(sourceData)
+        const entry: ComputedCacheEntry<T> = {
+          data,
+          timestamp: Date.now(),
+          dataHash,
+        }
+        const key = `${COMPUTED_CACHE_PREFIX}_${cacheKey}`
+        localStorage.setItem(key, JSON.stringify(entry))
+        return true
+      } catch {
+        return false
+      }
+    }
+    console.warn(`⚠️ Erreur mise en cache computation ${cacheKey}:`, error)
+    return false
+  }
+}
+
+/**
+ * Vide le cache des calculs
+ */
+export function clearComputedCache(): void {
+  if (!isLocalStorageAvailable()) {
+    return
+  }
+
+  try {
+    const keysToRemove: string[] = []
+    
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(COMPUTED_CACHE_PREFIX)) {
+        keysToRemove.push(key)
+      }
+    }
+    
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+    
+    if (keysToRemove.length > 0) {
+      console.log(`🗑️ Cache computations vidé: ${keysToRemove.length} entrées supprimées`)
+    }
+  } catch (error) {
+    console.warn('⚠️ Erreur lors du vidage du cache computations:', error)
+  }
+}
+

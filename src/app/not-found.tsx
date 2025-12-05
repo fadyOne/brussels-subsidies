@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1 container mx-auto px-4 py-8">
-        <AppHeader showStats={false} showNavigation={true} currentPage="search" />
+        <AppHeader showNavigation={true} currentPage="search" />
         
         <div className="max-w-2xl mx-auto mt-12 text-center">
           <h1 className="text-6xl font-bold text-gray-900 mb-4">404</h1>
