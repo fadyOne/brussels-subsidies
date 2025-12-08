@@ -1,14 +1,15 @@
 "use client"
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { FileText, Search, PieChart, Download, ExternalLink, Info } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
 import { AppFooter } from "@/components/AppFooter"
-import { getCachedData, setCachedData } from "@/lib/cache"
-import { normalizeSubsidesArray } from "@/lib/data-normalizer"
-import type { Subside } from "@/lib/types"
+// OPTIMISATION: Pas besoin de charger les données pour la page Aide
+// import { getCachedData, setCachedData } from "@/lib/cache"
+// import { normalizeSubsidesArray } from "@/lib/data-normalizer"
+// import type { Subside } from "@/lib/types"
 
 type Language = "fr" | "nl" | "en" | "de"
 
@@ -16,6 +17,12 @@ interface HelpContent {
   title: string
   subtitle: string
   backButton: string
+  betaWarning: {
+    title: string
+    description1: string
+    description2: string
+    linkText: string
+  }
   tableOfContents: {
     title: string
     items: string[]
@@ -51,9 +58,15 @@ interface HelpContent {
 
 const content: Record<Language, HelpContent> = {
   fr: {
-    title: "Aide & Informations",
-    subtitle: "Tout ce que vous devez savoir pour utiliser l'application",
+    title: "INFO",
+    subtitle: "Informations et aide pour utiliser l'application",
     backButton: "Retour",
+    betaWarning: {
+      title: "Version Beta",
+      description1: "Cette application est actuellement en version Beta. Les données présentées sont à titre d'observation et d'information uniquement.",
+      description2: "Important : Pour toute utilisation officielle ou décision importante, veuillez vérifier les sources originales transmises via les liens fournis (Open Data Brussels, KBO, North Data) et consulter les documents officiels de la Région de Bruxelles-Capitale.",
+      linkText: "Vérifier les sources officielles sur Open Data Brussels"
+    },
     tableOfContents: {
       title: "Table des matières",
       items: [
@@ -117,9 +130,15 @@ const content: Record<Language, HelpContent> = {
     }
   },
   nl: {
-    title: "Hulp & Informatie",
-    subtitle: "Alles wat u moet weten om de applicatie te gebruiken",
+    title: "INFO",
+    subtitle: "Informatie en hulp voor het gebruik van de applicatie",
     backButton: "Terug",
+    betaWarning: {
+      title: "Beta-versie",
+      description1: "Deze applicatie is momenteel in Beta-versie. De gepresenteerde gegevens zijn uitsluitend ter observatie en informatie.",
+      description2: "Belangrijk: Voor elk officieel gebruik of belangrijke beslissing, gelieve de originele bronnen te verifiëren die via de verstrekte links (Open Data Brussels, KBO, North Data) worden doorgegeven en de officiële documenten van het Brussels Hoofdstedelijk Gewest te raadplegen.",
+      linkText: "Verifieer de officiële bronnen op Open Data Brussels"
+    },
     tableOfContents: {
       title: "Inhoudsopgave",
       items: [
@@ -183,9 +202,15 @@ const content: Record<Language, HelpContent> = {
     }
   },
   en: {
-    title: "Help & Information",
-    subtitle: "Everything you need to know to use the application",
+    title: "INFO",
+    subtitle: "Information and help to use the application",
     backButton: "Back",
+    betaWarning: {
+      title: "Beta Version",
+      description1: "This application is currently in Beta version. The data presented is for observation and information purposes only.",
+      description2: "Important: For any official use or important decision, please verify the original sources transmitted via the provided links (Open Data Brussels, KBO, North Data) and consult the official documents of the Brussels-Capital Region.",
+      linkText: "Verify official sources on Open Data Brussels"
+    },
     tableOfContents: {
       title: "Table of Contents",
       items: [
@@ -249,9 +274,15 @@ const content: Record<Language, HelpContent> = {
     }
   },
   de: {
-    title: "Hilfe & Informationen",
-    subtitle: "Alles, was Sie wissen müssen, um die Anwendung zu nutzen",
+    title: "INFO",
+    subtitle: "Informationen und Hilfe zur Nutzung der Anwendung",
     backButton: "Zurück",
+    betaWarning: {
+      title: "Beta-Version",
+      description1: "Diese Anwendung befindet sich derzeit in der Beta-Version. Die präsentierten Daten dienen ausschließlich der Beobachtung und Information.",
+      description2: "Wichtig: Für jede offizielle Nutzung oder wichtige Entscheidung bitte die ursprünglichen Quellen überprüfen, die über die bereitgestellten Links (Open Data Brussels, KBO, North Data) übermittelt werden, und die offiziellen Dokumente der Region Brüssel-Hauptstadt konsultieren.",
+      linkText: "Offizielle Quellen auf Open Data Brussels überprüfen"
+    },
     tableOfContents: {
       title: "Inhaltsverzeichnis",
       items: [
@@ -332,76 +363,24 @@ const getIcon = (iconName: string) => {
 }
 
 export default function AidePage() {
-  const [language, setLanguage] = useState<Language>("fr")
-  const [subsides, setSubsides] = useState<Subside[]>([])
-  
-  // Charger la langue sauvegardée au montage
-  useEffect(() => {
-    const savedLanguage = localStorage.getItem("help-language") as Language | null
-    if (savedLanguage && ["fr", "nl", "en", "de"].includes(savedLanguage)) {
-      setLanguage(savedLanguage)
+  // Initialiser la langue depuis localStorage immédiatement (évite flash)
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const savedLanguage = localStorage.getItem("help-language") as Language | null
+      if (savedLanguage && ["fr", "nl", "en", "de"].includes(savedLanguage)) {
+        return savedLanguage
+      }
     }
-  }, [])
+    return "fr"
+  })
+  
+  // OPTIMISATION CRITIQUE: Ne PAS charger les données pour la page Aide
+  // Stats retirées du header pour performance
   
   // Sauvegarder la langue quand elle change
   useEffect(() => {
     localStorage.setItem("help-language", language)
   }, [language])
-  
-  // Fonction pour charger les données
-  const loadData = useCallback(async () => {
-    // Vérifier le cache en premier
-    const cachedData = getCachedData("all")
-    if (cachedData) {
-      setSubsides(cachedData)
-      return
-    }
-
-    // Si pas de cache, charger depuis les fichiers JSON
-    try {
-      const availableYears = ["2024", "2023", "2022", "2021", "2020", "2019"]
-      
-      const yearPromises = availableYears.map(async (year) => {
-        try {
-          const jsonData = await fetch(`/data-${year}.json`)
-          if (!jsonData.ok) {
-            return null
-          }
-          const rawData: unknown[] = await jsonData.json()
-          if (rawData && rawData.length > 0) {
-            const normalizedData = normalizeSubsidesArray(rawData, year)
-            return normalizedData
-          }
-          return null
-        } catch {
-          return null
-        }
-      })
-      
-      const results = await Promise.all(yearPromises)
-      const allData = results.filter((data): data is Subside[] => data !== null).flat()
-      
-      if (allData.length > 0) {
-        setSubsides(allData)
-        // Mettre en cache pour la prochaine fois
-        setCachedData(allData, "all")
-      }
-    } catch (error) {
-      console.warn("Erreur lors du chargement des données:", error)
-    }
-  }, [])
-
-  // Charger les données au montage
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-  
-  // Calculer les totaux pour les stats
-  const totalAmount = useMemo(() => {
-    return subsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
-  }, [subsides])
-  
-  const totalSubsides = subsides.length
   
   const currentContent = content[language]
 
@@ -409,11 +388,8 @@ export default function AidePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-3 sm:p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         <AppHeader
-          totalAmount={totalAmount}
-          totalSubsides={totalSubsides}
           selectedYear="all"
-          currentPage="aide"
-          showStats={true}
+          currentPage="info"
           showNavigation={true}
         />
         
@@ -441,6 +417,35 @@ export default function AidePage() {
             </Select>
           </div>
           <p className="text-gray-600 text-xs sm:text-sm md:text-base leading-relaxed">{currentContent.subtitle}</p>
+        </div>
+
+        {/* Message Beta - Important */}
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-lg shadow-sm p-4 sm:p-5 md:p-6">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 sm:w-6 sm:h-6 text-amber-700 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <h3 className="text-base sm:text-lg font-semibold text-amber-900">
+                {currentContent.betaWarning.title}
+              </h3>
+              <p className="text-sm sm:text-base text-amber-800 leading-relaxed">
+                {currentContent.betaWarning.description1}
+              </p>
+              <p className="text-sm sm:text-base text-amber-800 leading-relaxed">
+                {currentContent.betaWarning.description2}
+              </p>
+              <p className="text-sm sm:text-base text-amber-800 leading-relaxed">
+                <a 
+                  href={currentContent.dataSource.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-900 underline hover:text-amber-700 font-medium inline-flex items-center gap-1"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {currentContent.betaWarning.linkText}
+                </a>
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Accordéon avec toutes les sections */}

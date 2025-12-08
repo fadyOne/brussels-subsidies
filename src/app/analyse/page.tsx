@@ -1,11 +1,14 @@
 "use client"
-import { LoadingScreen } from "@/components/LoadingScreen"
+import { lazy, Suspense } from "react"
+import { SkeletonLoader } from "@/components/SkeletonLoader"
 import { CustomTooltip } from "@/components/CustomTooltip"
-import { NivoBarChart } from "@/components/NivoBarChart"
-import { Top10PieChart } from "@/components/Top10PieChart"
-import { Top10ListChart } from "@/components/Top10ListChart"
-import { PieChartLegend } from "@/components/PieChartLegend"
 import { ChartSkeleton } from "@/components/ChartSkeleton"
+
+// Lazy loading des composants de graphiques (Solution 1 - Performance)
+const NivoBarChart = lazy(() => import("@/components/NivoBarChart").then(module => ({ default: module.NivoBarChart })))
+const Top10PieChart = lazy(() => import("@/components/Top10PieChart").then(module => ({ default: module.Top10PieChart })))
+const Top10ListChart = lazy(() => import("@/components/Top10ListChart").then(module => ({ default: module.Top10ListChart })))
+const PieChartLegend = lazy(() => import("@/components/PieChartLegend").then(module => ({ default: module.PieChartLegend })))
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer } from "@/components/ui/chart"
@@ -15,12 +18,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, RefreshCw, PieChart as PieChartIcon, Search, X } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
 import { AppFooter } from "@/components/AppFooter"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react"
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import type { Subside } from '@/lib/types'
 import { normalizeSubsidesArray } from '@/lib/data-normalizer'
-import { getCachedData, setCachedData } from '@/lib/cache'
+import { getCachedData, setCachedData, getCachedComputation, setCachedComputation } from '@/lib/cache'
 import { groupBeneficiaries, normalizeBeneficiaryName as normalizeBeneficiaryNameDynamic } from '@/lib/beneficiary-normalizer'
 import { useResponsiveChart } from '@/lib/use-responsive-chart'
 import { categorizeSubside } from '@/lib/category-config'
@@ -88,10 +91,36 @@ function getBeneficiaryType(name: string, cache: Map<string, string>): string {
 
 
 export default function AnalysePage() {
-  const [subsides, setSubsides] = useState<Subside[]>([])
-  const [loading, setLoading] = useState(true)
+  // Initialiser selectedDataYear depuis URL immédiatement (évite double chargement)
+  const [selectedDataYear, setSelectedDataYear] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      return urlParams.get('year') || 'all'
+    }
+    return 'all'
+  })
+  
+  // Vérifier le cache immédiatement au montage pour affichage instantané
+  const [subsides, setSubsides] = useState<Subside[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = getCachedData(selectedDataYear)
+      if (cached) {
+        return cached // Afficher immédiatement les données en cache
+      }
+    }
+    return []
+  })
+  
+  // Si on a des données en cache, pas besoin de loading
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const cached = getCachedData(selectedDataYear)
+      return !cached // Pas de loading si données en cache
+    }
+    return true
+  })
+  
   const [error, setError] = useState<string | null>(null)
-  const [selectedDataYear, setSelectedDataYear] = useState<string>("all")
   // États pour la comparaison entre années
   const [comparisonCategoryFilter, setComparisonCategoryFilter] = useState<string>("all")
   const [selectedComparisonYears, setSelectedComparisonYears] = useState<string[]>([])
@@ -315,14 +344,11 @@ export default function AnalysePage() {
   }, [selectedDataYear, getAvailableYears])
 
   useEffect(() => {
-    // Charger les paramètres URL en premier
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search)
-      const year = urlParams.get('year')
-      if (year) setSelectedDataYear(year)
+    // Charger les données seulement si pas déjà en cache (évite double chargement)
+    // Si subsides est vide, c'est qu'on n'avait pas de cache, donc charger
+    if (subsides.length === 0) {
+      loadData(selectedDataYear)
     }
-    
-    loadData(selectedDataYear)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDataYear]) // loadData est stable grâce à useCallback, on utilise seulement selectedDataYear
 
@@ -355,17 +381,50 @@ export default function AnalysePage() {
 
   const uniqueCategories = [...new Set(subsides.map((s) => categorizeSubside(s.l_objet_de_la_subvention_doel_van_de_subsidie)))]
 
+  // Différer les calculs lourds pour permettre au rendu initial de se faire rapidement
+  // Cela permet à la page de s'afficher immédiatement même si les calculs prennent du temps
+  const deferredSubsides = useDeferredValue(subsides)
+  
   // Cache de regroupement des bénéficiaires (calculé une seule fois)
   const beneficiaryTypeCache = useMemo(() => {
-    return createBeneficiaryTypeCache(subsides)
-  }, [subsides])
+    return createBeneficiaryTypeCache(deferredSubsides)
+  }, [deferredSubsides])
 
   // Top Bénéficiaires Globaux (toutes catégories confondues)
   // Utilise le regroupement dynamique (normalisation + BCE) pour éviter la fragmentation
   // Permet de choisir le nombre (10, 20, 30, 40, 50) et de filtrer par montant minimum
+  // OPTIMISATION: Utilise le cache des calculs pour éviter de recalculer à chaque navigation
+  // OPTIMISATION: Utilise deferredSubsides pour différer les calculs lourds
   const topGlobalBeneficiaries = useMemo(() => {
+    // Si pas encore de données, retourner tableau vide (évite erreurs)
+    if (deferredSubsides.length === 0) {
+      return []
+    }
+    
+    // Vérifier le cache d'abord
+    const cacheKey = `topGlobalBeneficiaries_${selectedDataYear}_${topBeneficiariesCount}`
+    const cached = getCachedComputation<Array<{
+      name: string
+      totalAmount: number
+      count: number
+      categories: Record<string, number>
+      originalNames: string[]
+      rank: number
+      topCategory: string
+      topCategoryAmount: number
+    }>>(cacheKey, JSON.stringify(deferredSubsides.slice(0, 10).map(s => s.beneficiaire_begunstigde)))
+    
+    if (cached) {
+      // Convertir les structures sérialisées en Maps/Sets
+      return cached.map(item => ({
+        ...item,
+        categories: new Map(Object.entries(item.categories)),
+        originalNames: new Set(item.originalNames),
+      }))
+    }
+    
     // Étape 1 : Regrouper les bénéficiaires de manière dynamique
-    const beneficiaryGroups = groupBeneficiaries(subsides)
+    const beneficiaryGroups = groupBeneficiaries(deferredSubsides)
     
     // Étape 2 : Agréger par groupe avec les catégories
     const beneficiaryMap = new Map<string, { name: string; totalAmount: number; count: number; categories: Map<string, number>; originalNames: Set<string> }>()
@@ -416,6 +475,11 @@ export default function AnalysePage() {
       beneficiaryMap.set(groupKey, existing)
     })
     
+    // Si pas encore de données, retourner tableau vide
+    if (deferredSubsides.length === 0) {
+      return []
+    }
+    
     const result = Array.from(beneficiaryMap.values())
       .sort((a, b) => b.totalAmount - a.totalAmount)
       .map((item, index) => ({
@@ -428,8 +492,24 @@ export default function AnalysePage() {
       }))
     
     // Limiter au nombre sélectionné
-    return result.slice(0, topBeneficiariesCount)
-  }, [subsides, topBeneficiariesCount])
+    const finalResult = result.slice(0, topBeneficiariesCount)
+    
+    // Mettre en cache (convertir Maps/Sets en structures sérialisables)
+    const serializableResult = finalResult.map(item => ({
+      name: item.name,
+      totalAmount: item.totalAmount,
+      count: item.count,
+      categories: Object.fromEntries(item.categories),
+      originalNames: Array.from(item.originalNames),
+      rank: item.rank,
+      topCategory: item.topCategory,
+      topCategoryAmount: item.topCategoryAmount,
+    }))
+    
+    setCachedComputation(cacheKey, serializableResult, deferredSubsides)
+    
+    return finalResult
+  }, [deferredSubsides, topBeneficiariesCount, selectedDataYear])
 
   // Préparer les données pour le graphique : Top 10 + "Autres" pour améliorer la lisibilité
   const chartData = useMemo(() => {
@@ -1028,15 +1108,10 @@ export default function AnalysePage() {
     }
   }, [org1Data, org2Data])
 
-  // Calculer les stats pour le header (avant les early returns)
-  const totalAmount = useMemo(() => {
-    return subsides.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
-  }, [subsides])
-
-  const totalSubsides = subsides.length
+  // Stats retirées du header pour performance
 
   if (loading) {
-    return <LoadingScreen />
+    return <SkeletonLoader />
   }
 
   if (error) {
@@ -1059,36 +1134,51 @@ export default function AnalysePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         <AppHeader
-          totalAmount={totalAmount}
-          totalSubsides={totalSubsides}
           selectedYear={selectedDataYear}
           currentPage="analyse"
-          showStats={true}
           showNavigation={true}
         />
 
-        {/* Sous-onglets pour les graphiques */}
+        {/* Sous-onglets pour les graphiques - Style cohérent avec navigation principale */}
         <Tabs defaultValue="comparison" className="space-y-4 sm:space-y-6">
-          <div className="w-full bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 sm:p-1.5">
+          <div className="flex items-center gap-2 sm:gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 h-auto">
             <TabsList className="grid grid-cols-3 w-full h-auto gap-1 bg-transparent p-0 border-0">
-              <TabsTrigger 
-                value="comparison"
-                className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
-              >
-                Comparaison
-              </TabsTrigger>
-              <TabsTrigger 
-                value="by-category" 
-                className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
-              >
-                Par catégorie
-              </TabsTrigger>
-              <TabsTrigger 
-                value="top-beneficiaries" 
-                className="rounded-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-200 data-[state=active]:to-indigo-200 data-[state=active]:text-gray-800 text-gray-700 transition-all text-xs sm:text-sm font-medium py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center min-h-[44px] sm:min-h-0 whitespace-normal break-words border-0"
-              >
-                Top Bénéficiaires
-              </TabsTrigger>
+              <div className="flex-1 relative group min-w-0">
+                <div className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-green-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                <TabsTrigger 
+                  value="comparison"
+                  className="relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 hover:shadow-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-50 data-[state=active]:to-emerald-50 data-[state=active]:border-2 data-[state=active]:border-green-500 data-[state=active]:shadow-sm data-[state=active]:font-semibold border-gray-200 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:border-green-300/50 data-[state=inactive]:font-medium min-h-[44px] sm:min-h-0"
+                >
+                  <span className={`truncate data-[state=active]:text-green-800 data-[state=active]:font-semibold data-[state=inactive]:text-green-700 data-[state=inactive]:font-medium`}>
+                    Comparaison
+                  </span>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full data-[state=inactive]:hidden"></div>
+                </TabsTrigger>
+              </div>
+              <div className="flex-1 relative group min-w-0">
+                <div className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-green-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                <TabsTrigger 
+                  value="by-category"
+                  className="relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 hover:shadow-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-50 data-[state=active]:to-emerald-50 data-[state=active]:border-2 data-[state=active]:border-green-500 data-[state=active]:shadow-sm data-[state=active]:font-semibold border-gray-200 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:border-green-300/50 data-[state=inactive]:font-medium min-h-[44px] sm:min-h-0"
+                >
+                  <span className={`truncate data-[state=active]:text-green-800 data-[state=active]:font-semibold data-[state=inactive]:text-green-700 data-[state=inactive]:font-medium`}>
+                    Par catégorie
+                  </span>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full data-[state=inactive]:hidden"></div>
+                </TabsTrigger>
+              </div>
+              <div className="flex-1 relative group min-w-0">
+                <div className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-green-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                <TabsTrigger 
+                  value="top-beneficiaries"
+                  className="relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 hover:shadow-md data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-50 data-[state=active]:to-emerald-50 data-[state=active]:border-2 data-[state=active]:border-green-500 data-[state=active]:shadow-sm data-[state=active]:font-semibold border-gray-200 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:border-green-300/50 data-[state=inactive]:font-medium min-h-[44px] sm:min-h-0"
+                >
+                  <span className={`truncate data-[state=active]:text-green-800 data-[state=active]:font-semibold data-[state=inactive]:text-green-700 data-[state=inactive]:font-medium`}>
+                    Top Bénéficiaires
+                  </span>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-green-500 rounded-full data-[state=inactive]:hidden"></div>
+                </TabsTrigger>
+              </div>
             </TabsList>
           </div>
 
@@ -1116,34 +1206,70 @@ export default function AnalysePage() {
                           {topGlobalBeneficiaries.length > 10 && ' • Affichage optimisé : Top 10 + regroupement des autres'}
                         </CardDescription>
                       </div>
-                      {/* Sélecteur de type de graphique */}
-                      <div className="flex gap-1.5 sm:gap-2 flex-shrink-0">
-                        <Button
-                          variant={top10ChartType === 'pie' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setTop10ChartType('pie')}
-                          className="h-8 px-2.5 sm:px-3 text-xs font-medium"
-                        >
-                          <PieChartIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                          <span className="hidden sm:inline">Camembert</span>
-                          <span className="sm:hidden">Pie</span>
-                        </Button>
-                        <Button
-                          variant={top10ChartType === 'list' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setTop10ChartType('list')}
-                          className="h-8 px-2.5 sm:px-3 text-xs font-medium"
-                        >
-                          Liste
-                        </Button>
-                        <Button
-                          variant={top10ChartType === 'bar' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => setTop10ChartType('bar')}
-                          className="h-8 px-2.5 sm:px-3 text-xs font-medium"
-                        >
-                          Barres
-                        </Button>
+                      {/* Sélecteur de type de graphique - Niveau 3 : Bleu clair */}
+                      <div className="flex items-center gap-2 sm:gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 h-auto">
+                        <div className="flex-1 relative group min-w-0">
+                          <div className="absolute inset-0 rounded-md bg-gradient-to-r from-sky-400/20 via-blue-400/20 to-sky-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTop10ChartType('pie')}
+                            className={`relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 hover:shadow-md ${
+                              top10ChartType === 'pie'
+                                ? 'bg-gradient-to-r from-sky-50 to-blue-50 border-2 border-sky-400 shadow-sm font-semibold'
+                                : 'border-gray-200 hover:bg-gradient-to-r hover:from-sky-50 hover:to-blue-50 hover:border-sky-300/50'
+                            }`}
+                          >
+                            <PieChartIcon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${top10ChartType === 'pie' ? 'text-sky-600' : 'text-sky-500'}`} />
+                            <span className={`truncate ${top10ChartType === 'pie' ? 'text-sky-800 font-semibold' : 'text-sky-700 font-medium'}`}>
+                              <span className="hidden sm:inline">Camembert</span>
+                              <span className="sm:hidden">Pie</span>
+                            </span>
+                            {top10ChartType === 'pie' && (
+                              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-sky-400 rounded-full"></div>
+                            )}
+                          </Button>
+                        </div>
+                        <div className="flex-1 relative group min-w-0">
+                          <div className="absolute inset-0 rounded-md bg-gradient-to-r from-sky-400/20 via-blue-400/20 to-sky-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTop10ChartType('list')}
+                            className={`relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 hover:shadow-md ${
+                              top10ChartType === 'list'
+                                ? 'bg-gradient-to-r from-sky-50 to-blue-50 border-2 border-sky-400 shadow-sm font-semibold'
+                                : 'border-gray-200 hover:bg-gradient-to-r hover:from-sky-50 hover:to-blue-50 hover:border-sky-300/50'
+                            }`}
+                          >
+                            <span className={`truncate ${top10ChartType === 'list' ? 'text-sky-800 font-semibold' : 'text-sky-700 font-medium'}`}>
+                              Liste
+                            </span>
+                            {top10ChartType === 'list' && (
+                              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-sky-400 rounded-full"></div>
+                            )}
+                          </Button>
+                        </div>
+                        <div className="flex-1 relative group min-w-0">
+                          <div className="absolute inset-0 rounded-md bg-gradient-to-r from-sky-400/20 via-blue-400/20 to-sky-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setTop10ChartType('bar')}
+                            className={`relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 hover:shadow-md ${
+                              top10ChartType === 'bar'
+                                ? 'bg-gradient-to-r from-sky-50 to-blue-50 border-2 border-sky-400 shadow-sm font-semibold'
+                                : 'border-gray-200 hover:bg-gradient-to-r hover:from-sky-50 hover:to-blue-50 hover:border-sky-300/50'
+                            }`}
+                          >
+                            <span className={`truncate ${top10ChartType === 'bar' ? 'text-sky-800 font-semibold' : 'text-sky-700 font-medium'}`}>
+                              Barres
+                            </span>
+                            {top10ChartType === 'bar' && (
+                              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-sky-400 rounded-full"></div>
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
@@ -1184,8 +1310,9 @@ export default function AnalysePage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-6">
-                      <PieChartLegend
-                        data={chartData.map((item, index) => ({
+                      <Suspense fallback={<ChartSkeleton />}>
+                        <PieChartLegend
+                          data={chartData.map((item, index) => ({
                           name: item.name,
                           color: COLORS[index % COLORS.length],
                           rank: item.rank,
@@ -1199,6 +1326,7 @@ export default function AnalysePage() {
                           })
                         }}
                       />
+                      </Suspense>
                     </CardContent>
                   </Card>
                 )}
@@ -1221,15 +1349,17 @@ export default function AnalysePage() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="p-6">
-                      <NivoBarChart 
-                            data={categoryData.beneficiaries} 
-                        colors={COLORS}
-                        height={400}
-                        leftMargin={200}
-                        padding={0.6}
-                        onBarClick={handleBarClick}
-                        totalForPercentage={categoryData.beneficiaries.reduce((sum, b) => sum + b.totalAmount, 0)}
-                      />
+                      <Suspense fallback={<ChartSkeleton />}>
+                        <NivoBarChart 
+                              data={categoryData.beneficiaries} 
+                          colors={COLORS}
+                          height={400}
+                          leftMargin={200}
+                          padding={0.6}
+                          onBarClick={handleBarClick}
+                          totalForPercentage={categoryData.beneficiaries.reduce((sum, b) => sum + b.totalAmount, 0)}
+                        />
+                      </Suspense>
                     </CardContent>
                   </Card>
                 ))
@@ -1253,7 +1383,7 @@ export default function AnalysePage() {
                     }}
                     className="h-[300px] sm:h-[350px]"
                   >
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                       <BarChart data={yearData} margin={{ 
                         top: responsiveProps.topMargin, 
                         right: responsiveProps.rightMargin, 
@@ -1302,7 +1432,7 @@ export default function AnalysePage() {
                     }}
                     className="h-[300px] sm:h-[350px]"
                   >
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                       <BarChart data={yearData} margin={{ 
                         top: responsiveProps.topMargin, 
                         right: responsiveProps.rightMargin, 
@@ -1333,30 +1463,46 @@ export default function AnalysePage() {
 
           {/* Onglet Comparaison */}
           <TabsContent value="comparison" className="space-y-6">
-            {/* Sous-onglets pour Comparaison */}
-            <div className="flex gap-3 border-b border-gray-200 pb-3 justify-center">
-              <Button
-                variant={comparisonView === "organizations" ? "default" : "outline"}
-                onClick={() => setComparisonView("organizations")}
-                className={`${
-                  comparisonView === "organizations"
-                    ? "bg-pink-200 text-pink-600 hover:bg-pink-300 border-2 border-pink-300 shadow-md font-normal"
-                    : "text-gray-700 hover:text-gray-900 hover:bg-pink-50 border-2 border-gray-300 hover:border-pink-300 bg-white"
-                } transition-all duration-200 px-6 py-2.5 rounded-lg`}
-              >
-                Comparaison entre Organisations
-              </Button>
-              <Button
-                variant={comparisonView === "global" ? "default" : "outline"}
-                onClick={() => setComparisonView("global")}
-                className={`${
-                  comparisonView === "global"
-                    ? "bg-pink-200 text-pink-600 hover:bg-pink-300 border-2 border-pink-300 shadow-md font-normal"
-                    : "text-gray-700 hover:text-gray-900 hover:bg-pink-50 border-2 border-gray-300 hover:border-pink-300 bg-white"
-                } transition-all duration-200 px-6 py-2.5 rounded-lg`}
-              >
-                Global
-              </Button>
+            {/* Sous-onglets pour Comparaison - Niveau 3 : Bleu */}
+            <div className="flex items-center gap-2 sm:gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm rounded-lg p-1 h-auto">
+              <div className="flex-1 relative group min-w-0">
+                <div className="absolute inset-0 rounded-md bg-gradient-to-r from-blue-500/20 via-indigo-500/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                <Button
+                  variant="outline"
+                  onClick={() => setComparisonView("organizations")}
+                  className={`relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 sm:gap-2 hover:shadow-md ${
+                    comparisonView === "organizations"
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500 shadow-sm font-semibold'
+                      : 'border-gray-200 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300/50'
+                  }`}
+                >
+                  <span className={`truncate ${comparisonView === "organizations" ? 'text-blue-800 font-semibold' : 'text-gray-700 font-medium'}`}>
+                    Organisations
+                  </span>
+                  {comparisonView === "organizations" && (
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-500 rounded-full"></div>
+                  )}
+                </Button>
+              </div>
+              <div className="flex-1 relative group min-w-0">
+                <div className="absolute inset-0 rounded-md bg-gradient-to-r from-blue-500/20 via-indigo-500/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
+                <Button
+                  variant="outline"
+                  onClick={() => setComparisonView("global")}
+                  className={`relative w-full rounded-md transition-all py-2 sm:py-2.5 text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-1.5 sm:gap-2 hover:shadow-md ${
+                    comparisonView === "global"
+                      ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500 shadow-sm font-semibold'
+                      : 'border-gray-200 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300/50'
+                  }`}
+                >
+                  <span className={`truncate ${comparisonView === "global" ? 'text-blue-800 font-semibold' : 'text-gray-700 font-medium'}`}>
+                    Vue globale
+                  </span>
+                  {comparisonView === "global" && (
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-500 rounded-full"></div>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* Comparaison entre Organisations */}
@@ -1392,28 +1538,32 @@ export default function AnalysePage() {
                 {/* Sélection des organisations */}
                 <Card className="bg-transparent border-0 shadow-none p-0">
                   <CardContent className="p-0">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Groupe 1 */}
-                      <div className="space-y-1.5 min-h-[180px] flex flex-col">
+                      <div className="space-y-3 min-h-[180px] flex flex-col">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="h-1 w-8 bg-green-500 rounded-full"></div>
+                          <h4 className="text-sm font-semibold text-gray-700">Groupe 1</h4>
+                        </div>
                         {/* Tags des organisations sélectionnées */}
-                        <div className="min-h-[30px] flex flex-wrap gap-1 mb-1">
+                        <div className="min-h-[30px] flex flex-wrap gap-1.5 mb-1">
                           {selectedOrg1.length > 0 && (
                             selectedOrg1.map((orgName) => (
                               <div
                                 key={orgName}
-                                className="flex items-center gap-0.5 text-green-700 px-1 py-0 text-[9px] font-medium border border-green-300 rounded"
+                                className="flex items-center gap-1 text-green-800 bg-green-100 px-2 py-1 text-xs font-medium border border-green-300 rounded-md shadow-sm"
                               >
-                                <span className="max-w-[80px] truncate" title={orgName}>
-                                  {orgName.length > 12 ? `${orgName.substring(0, 12)}...` : orgName}
+                                <span className="max-w-[100px] truncate" title={orgName}>
+                                  {orgName.length > 15 ? `${orgName.substring(0, 15)}...` : orgName}
                                 </span>
                                 <button
                                   onClick={() => {
                                     setSelectedOrg1(selectedOrg1.filter(name => name !== orgName))
                                   }}
-                                  className="hover:text-green-900 rounded p-0 transition-colors"
+                                  className="hover:text-green-900 hover:bg-green-200 rounded-full p-0.5 transition-colors ml-0.5"
                                   aria-label={`Retirer ${orgName}`}
                                 >
-                                  <X className="h-2 w-2" />
+                                  <X className="h-3 w-3" />
                                 </button>
                               </div>
                             ))
@@ -1422,12 +1572,12 @@ export default function AnalysePage() {
                         <div className="relative group flex-shrink-0">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-green-600 z-10 transition-colors duration-200 group-focus-within:text-green-700" />
                       <Input
-                        placeholder="Rechercher une organisation..."
+                        placeholder="..."
                         value={orgSearch1}
                         onChange={(e) => {
                           setOrgSearch1(e.target.value)
                         }}
-                        className="pl-9 sm:pl-10 pr-9 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-green-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg w-full"
+                        className="pl-9 sm:pl-10 pr-9 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-white transition-all duration-200 shadow-sm focus:shadow-lg w-full"
                         style={{ caretColor: '#10B981' }}
                       />
                       {orgSearch1 && (
@@ -1466,26 +1616,30 @@ export default function AnalysePage() {
                   </div>
 
                   {/* Groupe 2 */}
-                  <div className="space-y-1.5 min-h-[180px] flex flex-col">
+                  <div className="space-y-3 min-h-[180px] flex flex-col">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="h-1 w-8 bg-pink-500 rounded-full"></div>
+                      <h4 className="text-sm font-semibold text-gray-700">Groupe 2</h4>
+                    </div>
                     {/* Tags des organisations sélectionnées */}
-                    <div className="min-h-[30px] flex flex-wrap gap-1 mb-1">
+                    <div className="min-h-[30px] flex flex-wrap gap-1.5 mb-1">
                       {selectedOrg2.length > 0 && (
                         selectedOrg2.map((orgName) => (
                           <div
                             key={orgName}
-                            className="flex items-center gap-0.5 text-pink-700 px-1 py-0 text-[9px] font-medium border border-pink-300 rounded"
+                            className="flex items-center gap-1 text-pink-800 bg-pink-100 px-2 py-1 text-xs font-medium border border-pink-300 rounded-md shadow-sm"
                           >
-                            <span className="max-w-[80px] truncate" title={orgName}>
-                              {orgName.length > 12 ? `${orgName.substring(0, 12)}...` : orgName}
+                            <span className="max-w-[100px] truncate" title={orgName}>
+                              {orgName.length > 15 ? `${orgName.substring(0, 15)}...` : orgName}
                             </span>
                             <button
                               onClick={() => {
                                 setSelectedOrg2(selectedOrg2.filter(name => name !== orgName))
                               }}
-                              className="hover:text-pink-900 rounded p-0 transition-colors"
+                              className="hover:text-pink-900 hover:bg-pink-200 rounded-full p-0.5 transition-colors ml-0.5"
                               aria-label={`Retirer ${orgName}`}
                             >
-                              <X className="h-2 w-2" />
+                              <X className="h-3 w-3" />
                             </button>
                           </div>
                         ))
@@ -1494,12 +1648,12 @@ export default function AnalysePage() {
                     <div className="relative group flex-shrink-0">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-pink-600 z-10 transition-colors duration-200 group-focus-within:text-pink-700" />
                       <Input
-                        placeholder="Rechercher une organisation..."
+                        placeholder="..."
                         value={orgSearch2}
                         onChange={(e) => {
                           setOrgSearch2(e.target.value)
                         }}
-                        className="pl-9 sm:pl-10 pr-9 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-pink-300 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/50 rounded-lg bg-pink-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg w-full"
+                        className="pl-9 sm:pl-10 pr-9 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-pink-300 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/50 rounded-lg bg-white transition-all duration-200 shadow-sm focus:shadow-lg w-full"
                         style={{ caretColor: '#EC4899' }}
                       />
                       {orgSearch2 && (
@@ -2017,7 +2171,7 @@ export default function AnalysePage() {
                     }}
                     className="h-[300px] sm:h-[350px] lg:h-[400px]"
                   >
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                     <LineChart data={evolutionLineData} margin={{ 
                       top: responsiveProps.topMargin, 
                       right: responsiveProps.rightMargin, 
@@ -2125,8 +2279,9 @@ export default function AnalysePage() {
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                <NivoBarChart 
-                  data={categoryComparisonData
+                <Suspense fallback={<ChartSkeleton />}>
+                  <NivoBarChart 
+                    data={categoryComparisonData
                     .slice(0, 10)
                     .map((item) => {
                       // Agréger les montants de toutes les années sélectionnées
@@ -2153,6 +2308,7 @@ export default function AnalysePage() {
                   padding={0.6}
                   onBarClick={handleBarClick}
                 />
+                </Suspense>
               </CardContent>
             </Card>
             )}

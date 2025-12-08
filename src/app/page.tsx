@@ -1,6 +1,8 @@
 "use client"
-import { LoadingScreen } from "@/components/LoadingScreen"
-import { MiniEvolutionChart } from "@/components/MiniEvolutionChart"
+import { lazy, Suspense, startTransition } from "react"
+import { SkeletonLoader } from "@/components/SkeletonLoader"
+// Lazy load MiniEvolutionChart (contient Recharts)
+const MiniEvolutionChart = lazy(() => import("@/components/MiniEvolutionChart").then(module => ({ default: module.MiniEvolutionChart })))
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,16 +19,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertCircle, Building, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, Search, Share2, Link2 } from "lucide-react"
 import { AppHeader } from "@/components/AppHeader"
 import { AppFooter } from "@/components/AppFooter"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+
+// Lazy loading des Dialogs pour performance (Solution 1)
+const ExportDialog = lazy(() => import("@/components/ExportDialog").then(module => ({ default: module.ExportDialog })))
+const ShareDialog = lazy(() => import("@/components/ShareDialog").then(module => ({ default: module.ShareDialog })))
+
+import { useCallback, useEffect, useMemo, useState, useDeferredValue } from "react"
 
 import type { Subside } from '@/lib/types'
 import { normalizeSubsidesArray } from '@/lib/data-normalizer'
-import { exportData, type ExportColumn, DEFAULT_COLUMNS, COLUMN_LABELS } from '@/lib/data-exporter'
-import { getCachedData, setCachedData } from '@/lib/cache'
+import { type ExportColumn, DEFAULT_COLUMNS } from '@/lib/data-exporter'
+// Lazy load exportData pour éviter de charger XLSX + jsPDF au montage (700KB économisés!)
+const loadExportData = () => import('@/lib/data-exporter').then(m => m.exportData)
+import { getCachedData, setCachedData, getCachedComputation, setCachedComputation } from '@/lib/cache'
 import { categorizeSubside } from '@/lib/category-config'
 import { loadFilterPreset, generateHash, normalizeForHash } from '@/lib/filter-presets'
 import { devLog, devWarn, devError, formatNumberWithSpaces } from '@/lib/utils'
-import { detectRelationships, type OrganizationRelationship } from '@/lib/organization-relationships'
+// ⚠️ DÉSACTIVÉ TEMPORAIREMENT : detectRelationships sera calculé hors ligne
+// Les relations seront pré-calculées dans les JSON lors de l'ajout de données
+// const loadDetectRelationships = () => import('@/lib/organization-relationships').then(m => m.detectRelationships)
+import type { OrganizationRelationship } from '@/lib/organization-relationships'
+
+// Totaux fixes calculés une seule fois (calculés depuis les fichiers JSON)
+// Ces valeurs sont utilisées pour afficher le total global quand il n'y a pas de recherche
+const TOTAL_SUBSIDES = 7635 // Total de tous les subsides (2019-2024)
+const TOTAL_MONTANT = 949437072 // Total en euros (calculé depuis les fichiers JSON: 2019=0, 2020=82042, 2021=146202, 2022=294380820, 2023=317443715, 2024=337384293)
 
 // Fonction pour obtenir le schéma de couleurs selon l'année (hors composant pour performance)
 const getYearColorScheme = (year: string) => {
@@ -111,7 +129,8 @@ const getYearColorScheme = (year: string) => {
 export default function SubsidesDashboard() {
   const [subsides, setSubsides] = useState<Subside[]>([])
   const [filteredSubsides, setFilteredSubsides] = useState<Subside[]>([])
-  const [loading, setLoading] = useState(true)
+  // CRITIQUE: Plus de state loading - la page s'affiche immédiatement
+  // Les données se chargeront en arrière-plan sans bloquer la navigation
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedDataYear, setSelectedDataYear] = useState<string>("all")
@@ -122,22 +141,57 @@ export default function SubsidesDashboard() {
   const [showCopyNotification, setShowCopyNotification] = useState(false)
   const [errorNotification, setErrorNotification] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
-  const [selectedColumns, setSelectedColumns] = useState<ExportColumn[]>(DEFAULT_COLUMNS)
+  // Colonnes pré-sélectionnées par défaut : article, bénéficiaire, montant, objet, année
+  const DEFAULT_SELECTED_COLUMNS: ExportColumn[] = [
+    'article_complet',
+    'beneficiaire',
+    'montant_octroye',
+    'objet',
+    'annee_debut',
+  ]
+  const [selectedColumns, setSelectedColumns] = useState<ExportColumn[]>(DEFAULT_SELECTED_COLUMNS)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showShareDialog, setShowShareDialog] = useState(false)
   const [presetLoaded, setPresetLoaded] = useState(false) // Prevent multiple loads
   const [openDialogIndex, setOpenDialogIndex] = useState<number | null>(null) // Contrôle l'ouverture du Dialog
 
   // Fonction pour détecter automatiquement les années disponibles
+  // OPTIMISATION: Cache pour éviter les requêtes HEAD répétées
   // Optimisée : ne fait pas de requêtes HEAD séquentielles qui ralentissent le chargement
   const getAvailableYears = useCallback(async (): Promise<string[]> => {
+    // Vérifier le cache d'abord (TTL: 24h car les années ne changent pas souvent)
+    const cacheKey = 'availableYears'
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(cacheKey)
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached)
+          const now = Date.now()
+          // Cache valide pendant 24h
+          if (now - timestamp < 24 * 60 * 60 * 1000) {
+            devLog('✅ Années récupérées depuis le cache')
+            return data
+          }
+        }
+      } catch {
+        // Ignorer les erreurs de cache
+      }
+    }
+
     try {
-      // Liste des années possibles
+      // ✅ EXCLURE EXPLICITEMENT 2025 - Ne charger que les années complètes (2019-2024)
+      // 2025 sera géré séparément dans une autre partie de l'application
       const possibleYears = ["2024", "2023", "2022", "2021", "2020", "2019"]
       const years: string[] = ["all"]
       
       // Vérifier toutes les années en parallèle pour plus de rapidité
       const yearChecks = possibleYears.map(async (year) => {
         try {
+          // ✅ Ne pas charger data-2025-incomplete.json ou tout fichier 2025
+          if (year.startsWith('2025')) {
+            return null
+          }
+          
           const response = await fetch(`/data-${year}.json`, { method: 'HEAD' })
           if (response.ok) {
             return year
@@ -152,11 +206,23 @@ export default function SubsidesDashboard() {
       const foundYears = results.filter((year): year is string => year !== null)
       years.push(...foundYears)
       
+      // Mettre en cache
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            data: years,
+            timestamp: Date.now()
+          }))
+        } catch {
+          // Ignorer les erreurs de cache
+        }
+      }
+      
       devLog(`📅 ${foundYears.length} années de données détectées:`, foundYears)
       return years
     } catch (error) {
       devError("Erreur lors de la détection des années:", error)
-      // Fallback vers les années connues
+      // Fallback vers les années connues (sans 2025)
       return ["all", "2024", "2023", "2022", "2021", "2020", "2019"]
     }
   }, [])
@@ -262,8 +328,8 @@ export default function SubsidesDashboard() {
     setTimeout(() => setErrorNotification(null), 5000) // Auto-dismiss après 5 secondes
   }, [])
 
-  // Fonction pour exporter les données
-  const handleExport = useCallback((format: 'csv' | 'excel' | 'json' | 'pdf') => {
+  // Fonction pour exporter les données (lazy load exportData pour éviter XLSX + jsPDF au montage)
+  const handleExport = useCallback(async (format: 'csv' | 'excel' | 'json' | 'pdf') => {
     if (filteredSubsides.length === 0) {
       showErrorNotification('Aucune donnée à exporter')
       return
@@ -275,29 +341,58 @@ export default function SubsidesDashboard() {
     }
 
     setIsExporting(true)
-    try {
-      exportData(format, {
-        data: filteredSubsides,
-        filename: 'subside',
-        filters: {
-          year: selectedDataYear,
-          // Filtre de catégorie retiré - toujours "toutes les catégories"
-          category: undefined as string | undefined,
-          searchTerm: searchTerm || undefined,
-        },
-        includeMetadata: true,
-        // Toujours passer selectedColumns (même si toutes les colonnes sont sélectionnées)
-        // Les fonctions d'export utiliseront DEFAULT_COLUMNS si undefined, mais on évite les problèmes
-        selectedColumns: selectedColumns.length > 0 ? selectedColumns : DEFAULT_COLUMNS,
-      })
-      setShowExportDialog(false)
-    } catch (error) {
-      devError('Erreur lors de l\'export:', error)
-      showErrorNotification(`Erreur lors de l'export ${format.toUpperCase()}. Veuillez réessayer.`)
-    } finally {
-      setIsExporting(false)
-    }
+    // Utiliser startTransition pour ne pas bloquer l'UI
+    startTransition(async () => {
+      try {
+        // Lazy load exportData seulement quand nécessaire (XLSX + jsPDF = 700KB économisés!)
+        const exportData = await loadExportData()
+        exportData(format, {
+          data: filteredSubsides,
+          filename: 'subside',
+          filters: {
+            year: selectedDataYear,
+            // Filtre de catégorie retiré - toujours "toutes les catégories"
+            category: undefined as string | undefined,
+            searchTerm: searchTerm || undefined,
+          },
+          includeMetadata: true,
+          // Toujours passer selectedColumns (même si toutes les colonnes sont sélectionnées)
+          // Les fonctions d'export utiliseront DEFAULT_COLUMNS si undefined, mais on évite les problèmes
+          selectedColumns: selectedColumns.length > 0 ? selectedColumns : DEFAULT_COLUMNS,
+        })
+        setShowExportDialog(false)
+      } catch (error) {
+        devError('Erreur lors de l\'export:', error)
+        showErrorNotification(`Erreur lors de l'export ${format.toUpperCase()}. Veuillez réessayer.`)
+      } finally {
+        setIsExporting(false)
+      }
+    })
   }, [filteredSubsides, selectedDataYear, searchTerm, selectedColumns, showErrorNotification])
+  
+  // Handler pour copier le lien (optimisé avec startTransition)
+  const handleCopyLink = useCallback(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('year', selectedDataYear)
+    if (searchTerm) url.searchParams.set('search', searchTerm)
+    
+    startTransition(() => {
+      navigator.clipboard.writeText(url.toString()).then(() => {
+        setShowCopyNotification(true)
+        setTimeout(() => setShowCopyNotification(false), 2000)
+      }).catch(() => {
+        // Fallback
+        const textArea = document.createElement('textarea')
+        textArea.value = url.toString()
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+        setShowCopyNotification(true)
+        setTimeout(() => setShowCopyNotification(false), 2000)
+      })
+    })
+  }, [selectedDataYear, searchTerm])
 
   // Fonction pour gérer la sélection de colonnes
   const handleColumnToggle = useCallback((column: ExportColumn) => {
@@ -333,7 +428,7 @@ export default function SubsidesDashboard() {
   const loadData = useCallback(async (dataYear: string = selectedDataYear) => {
     try {
       devLog('🚀 Début du chargement des données pour:', dataYear)
-      setLoading(true)
+      // Plus de setLoading - données chargées en arrière-plan sans bloquer
       setError(null)
 
       // ✅ Vérifier le cache en premier (amélioration 2)
@@ -342,7 +437,7 @@ export default function SubsidesDashboard() {
         devLog('✅ Données récupérées depuis le cache')
         setSubsides(cachedData)
         setFilteredSubsides(cachedData)
-        setLoading(false)
+        // setLoading(false) // Plus nécessaire
         return
       }
 
@@ -356,11 +451,18 @@ export default function SubsidesDashboard() {
         setAvailableDataYears(detectedYears)
         
         // Charger toutes les années (sauf "all")
-        const years = detectedYears.filter(year => year !== "all")
+        // ✅ EXCLURE EXPLICITEMENT 2025 - Ne charger que les années complètes
+        const years = detectedYears.filter(year => year !== "all" && !year.startsWith('2025'))
         
         // ✅ Chargement parallèle au lieu de séquentiel
         const yearPromises = years.map(async (year) => {
           try {
+            // ✅ Double vérification : ne pas charger 2025
+            if (year.startsWith('2025')) {
+              devWarn(`⚠️ Année 2025 exclue du chargement (données incomplètes)`)
+              return null
+            }
+            
             devLog(`📁 Chargement des données ${year}...`)
             const jsonData = await fetch(`/data-${year}.json`)
             
@@ -425,24 +527,32 @@ export default function SubsidesDashboard() {
       devError("❌ Erreur chargement JSON:", apiError)
       setError(`Erreur lors du chargement des données: ${apiError instanceof Error ? apiError.message : String(apiError)}`)
     } finally {
-      devLog('🏁 Fin du chargement, setLoading(false)')
-      setLoading(false)
+      devLog('🏁 Fin du chargement')
+      // setLoading(false) // Plus nécessaire - données chargées en arrière-plan
     }
   }, [selectedDataYear, getAvailableYears])
 
+  // Charger les données en arrière-plan (non-bloquant pour la navigation)
   useEffect(() => {
-    loadData(selectedDataYear)
+    // Utiliser startTransition pour ne pas bloquer la navigation
+    startTransition(() => {
+      loadData(selectedDataYear)
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDataYear]) // loadData est stable grâce à useCallback, on utilise seulement selectedDataYear
 
-  // Filtrage des données avec debounce pour optimiser la recherche
+  // OPTIMISATION: Utiliser useDeferredValue pour la recherche (React 18)
+  // Cela permet de garder l'UI réactive pendant que la recherche se fait en arrière-plan
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const deferredSelectedCommune = useDeferredValue(selectedCommune)
+
+  // Filtrage des données optimisé avec useDeferredValue
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
     let filtered = subsides
 
     // Check if search term is a hash search marker (fallback mode)
-    if (searchTerm.startsWith('__HASH_SEARCH__:')) {
-      const targetHash = searchTerm.substring('__HASH_SEARCH__:'.length)
+    if (deferredSearchTerm.startsWith('__HASH_SEARCH__:')) {
+      const targetHash = deferredSearchTerm.substring('__HASH_SEARCH__:'.length)
       
       devLog(`[Page] Hash search mode, looking for hash: ${targetHash}`)
       
@@ -458,9 +568,9 @@ export default function SubsidesDashboard() {
       } else {
         devWarn(`[Page] No matches found for hash ${targetHash}`)
       }
-    } else if (searchTerm) {
+    } else if (deferredSearchTerm) {
         // Normal search
-        const searchLower = searchTerm.toLowerCase().trim()
+        const searchLower = deferredSearchTerm.toLowerCase().trim()
         
         // Si le terme de recherche contient plusieurs mots, chercher si TOUS les mots sont présents
         // Sinon, chercher si le terme est contenu dans les champs
@@ -500,18 +610,15 @@ export default function SubsidesDashboard() {
 
     // Filtre de catégorie retiré - toujours "toutes les catégories"
 
-    if (selectedCommune !== "all") {
+    if (deferredSelectedCommune !== "all") {
       filtered = filtered.filter(
-        (s) => s.beneficiaire_begunstigde === selectedCommune,
+        (s) => s.beneficiaire_begunstigde === deferredSelectedCommune,
       )
     }
 
     setFilteredSubsides(filtered)
     setCurrentPage(1)
-    }, 300) // Debounce de 300ms pour éviter trop de recalculs
-
-    return () => clearTimeout(timeoutId)
-  }, [subsides, searchTerm, selectedCommune])
+  }, [subsides, deferredSearchTerm, deferredSelectedCommune])
 
   // Pagination - mémorisé pour éviter les recalculs
   const paginationData = useMemo(() => {
@@ -524,20 +631,33 @@ export default function SubsidesDashboard() {
   const { totalPages, paginatedSubsides } = paginationData
 
 
-  // Calcul des totaux avec useMemo pour s'assurer qu'ils sont recalculés
-  const totalMontant = useMemo(() => {
-    // Utiliser filteredSubsides s'il y en a, sinon toutes les données
-    const dataToUse = filteredSubsides.length > 0 ? filteredSubsides : subsides
-    // Calculer le total de TOUS les subsides filtrés, pas seulement ceux avec une catégorie
-    return dataToUse.reduce((sum, s) => sum + s.montant_octroye_toegekend_bedrag, 0)
-  }, [filteredSubsides, subsides])
-
-
-  // totalSubsides est une simple propriété, pas besoin de useMemo
-  const totalSubsides = filteredSubsides.length
+  // Totaux des résultats filtrés (calculés dynamiquement)
+  // Afficher seulement quand il y a une recherche active
+  const filteredTotalSubsides = filteredSubsides.length
+  const filteredTotalMontant = useMemo(() => {
+    return filteredSubsides.reduce((sum, subside) => sum + (subside.montant_octroye_toegekend_bedrag || 0), 0)
+  }, [filteredSubsides])
 
   // Données pour le mini-graphique d'évolution par année
+  // OPTIMISATION: Mise en cache pour éviter les recalculs inutiles
   const evolutionData = useMemo(() => {
+    // Vérifier le cache d'abord
+    const cacheKey = `evolutionData_${selectedDataYear}`
+    // Hash simple basé sur les premiers subsides pour détecter les changements
+    const dataHash = filteredSubsides.length > 0 
+      ? JSON.stringify(filteredSubsides.slice(0, 10).map(s => ({
+          year: s.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend,
+          amount: s.montant_octroye_toegekend_bedrag
+        })))
+      : 'empty'
+    
+    const cached = getCachedComputation<Array<{year: string, amount: number}>>(cacheKey, dataHash)
+    if (cached) {
+      devLog('✅ evolutionData récupéré depuis le cache')
+      return cached
+    }
+
+    // Sinon, calculer
     const yearMap = new Map<string, number>()
     
     filteredSubsides.forEach(subside => {
@@ -548,78 +668,38 @@ export default function SubsidesDashboard() {
       }
     })
     
-    return Array.from(yearMap.entries())
+    const result = Array.from(yearMap.entries())
       .map(([year, amount]) => ({ year, amount }))
       .sort((a, b) => a.year.localeCompare(b.year))
       .slice(-6) // Garder les 6 dernières années max pour le mini-graphique
-  }, [filteredSubsides])
+    
+    // Mettre en cache
+    setCachedComputation(cacheKey, result, filteredSubsides)
+    
+    return result
+  }, [filteredSubsides, selectedDataYear])
 
-  // Détection des relations entre organisations (calculé de manière asynchrone pour ne pas bloquer)
-  const [organizationRelationships, setOrganizationRelationships] = useState<Map<string, OrganizationRelationship[]>>(new Map())
+  // Détection des relations entre organisations
+  // ⚠️ DÉSACTIVÉ TEMPORAIREMENT : Calcul trop lourd pour la page d'accueil
+  // Les relations seront calculées hors ligne lors de l'ajout de données et flaggées dans les JSON
+  // Réactiver seulement quand les données seront pré-calculées dans les fichiers JSON
+  // Le state est gardé pour que le JSX ne casse pas (les conditions .has() retourneront false)
+  const [organizationRelationships] = useState<Map<string, OrganizationRelationship[]>>(new Map())
 
-  // Calculer les relations de manière asynchrone après le chargement initial
-  useEffect(() => {
-    if (subsides.length === 0) {
-      setOrganizationRelationships(new Map())
-      return
-    }
-
-    // Différer le calcul pour ne pas bloquer le rendu initial
-    // Utiliser requestIdleCallback si disponible, sinon setTimeout
-    const scheduleCalculation = () => {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-          calculateRelationships()
-        }, { timeout: 2000 }) // Timeout de 2s pour forcer l'exécution si nécessaire
-      } else {
-        // Fallback pour les navigateurs sans requestIdleCallback
-        setTimeout(() => {
-          calculateRelationships()
-        }, 100) // Démarrer après 100ms
-      }
-    }
-
-    const calculateRelationships = () => {
-      try {
-        devLog('🔍 Calcul des relations entre organisations...')
-        const relationships = detectRelationships(subsides, 0.6)
-        
-        // Créer un Map pour accès rapide : orgName -> relations
-        const relationshipsMap = new Map<string, OrganizationRelationship[]>()
-        
-        relationships.forEach(rel => {
-          // Ajouter pour l'organisation source
-          if (!relationshipsMap.has(rel.sourceOrg)) {
-            relationshipsMap.set(rel.sourceOrg, [])
-          }
-          relationshipsMap.get(rel.sourceOrg)!.push(rel)
-          
-          // Ajouter pour l'organisation cible (relations bidirectionnelles)
-          if (!relationshipsMap.has(rel.targetOrg)) {
-            relationshipsMap.set(rel.targetOrg, [])
-          }
-          relationshipsMap.get(rel.targetOrg)!.push({
-            ...rel,
-            sourceOrg: rel.targetOrg,
-            targetOrg: rel.sourceOrg
-          })
-        })
-        
-        setOrganizationRelationships(relationshipsMap)
-        devLog(`✅ Relations calculées: ${relationships.length} relations détectées`)
-      } catch (error) {
-        devError("Erreur lors de la détection des relations:", error)
-        setOrganizationRelationships(new Map())
-      }
-    }
-
-    scheduleCalculation()
-  }, [subsides])
+  // ⚠️ CALCUL DÉSACTIVÉ - Les relations seront pré-calculées dans les JSON lors de l'ajout de données
+  // Ce calcul sera fait une fois hors ligne, pas à chaque chargement de page
+  // useEffect(() => {
+  //   if (subsides.length === 0) {
+  //     setOrganizationRelationships(new Map())
+  //     return
+  //   }
+  //   // ... code désactivé ...
+  // }, [subsides, selectedDataYear])
 
 
-  if (loading) {
-    return <LoadingScreen />
-  }
+  // Afficher un skeleton seulement si pas de données ET pas d'erreur
+  // Mais ne pas bloquer la navigation - la page s'affiche immédiatement
+  const showSkeleton = subsides.length === 0 && !error
 
   if (error) {
     return (
@@ -635,6 +715,11 @@ export default function SubsidesDashboard() {
         </div>
       </div>
     )
+  }
+
+  // Afficher la page immédiatement, avec skeleton si pas de données
+  if (showSkeleton) {
+    return <SkeletonLoader />
   }
 
   return (
@@ -669,11 +754,8 @@ export default function SubsidesDashboard() {
       
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         <AppHeader
-          totalAmount={totalMontant}
-          totalSubsides={totalSubsides}
           selectedYear={selectedDataYear}
           currentPage="search"
-          showStats={true}
           showNavigation={true}
         />
 
@@ -694,7 +776,7 @@ export default function SubsidesDashboard() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-green-600 z-10 transition-colors duration-200 group-focus-within:text-green-700" />
                     <Input
-                        placeholder="bénéficiaire, projet..."
+                        placeholder="..."
                       value={searchTerm}
                       onChange={(e) => {
                         const value = e.target.value
@@ -704,7 +786,7 @@ export default function SubsidesDashboard() {
                         }
                       }}
                       maxLength={24}
-                        className="pl-9 sm:pl-10 pr-8 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-green-50/50 focus:bg-white transition-all duration-200 shadow-sm focus:shadow-lg"
+                        className="pl-9 sm:pl-10 pr-8 sm:pr-10 h-10 sm:h-11 text-sm border-2 border-green-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/50 rounded-lg bg-white transition-all duration-200 shadow-sm focus:shadow-lg"
                         aria-label="bénéficiaire, projet ou numéro de dossier"
                         style={{ caretColor: '#10b981' }}
                       />
@@ -752,301 +834,124 @@ export default function SubsidesDashboard() {
                 </Select>
 
                 {/* Filtre de catégorie retiré - toujours "toutes les catégories" */}
-            </div>
+              </div>
 
               {/* Boutons d'action compacts */}
-              <div className="flex gap-2 flex-shrink-0">
-                {/* Menu d'export */}
-                <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isExporting || filteredSubsides.length === 0}
-                      className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
-                      title="Exporter les données"
-                      aria-label="Exporter les données filtrées"
-                    >
-                      <Download className={`w-4 h-4 ${isExporting ? 'animate-spin' : ''}`} />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-                    <DialogHeader>
-                      <DialogTitle className="flex items-center gap-2">
-                        <Download className="w-5 h-5" />
-                        Exporter les données
-                      </DialogTitle>
-                      <DialogDescription>
-                        Choisissez les colonnes à exporter et le format de fichier
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    {/* Info sur la sélection des subsides */}
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                      <p className="text-sm font-medium text-green-900">
-                        {filteredSubsides.length} subside{filteredSubsides.length > 1 ? 's' : ''} sera{filteredSubsides.length > 1 ? 'ont' : ''} exporté{filteredSubsides.length > 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    
-                    {/* Sélection de colonnes */}
-                    <div className="space-y-3 border-t border-b py-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-gray-700">Colonnes à exporter</h4>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleSelectAllColumns}
-                          className="text-xs sm:text-sm h-9 sm:h-8 px-3 sm:px-2 min-h-[44px] sm:min-h-0"
-                        >
-                          {selectedColumns.length === DEFAULT_COLUMNS.length ? 'Tout désélectionner' : 'Tout sélectionner'}
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                        {DEFAULT_COLUMNS.map((column) => (
-                          <label
-                            key={column}
-                            className="flex items-center gap-2 p-2 rounded border border-gray-300 hover:bg-gray-50 cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedColumns.includes(column)}
-                              onChange={() => handleColumnToggle(column)}
-                              className="w-4 h-4 text-green-900 border-gray-300 rounded focus:ring-green-700"
-                              aria-label={`Sélectionner la colonne ${COLUMN_LABELS[column]}`}
-                            />
-                            <span className="text-sm sm:text-base text-gray-700">{COLUMN_LABELS[column]}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {selectedColumns.length} colonne{selectedColumns.length > 1 ? 's' : ''} sélectionnée{selectedColumns.length > 1 ? 's' : ''}
-                      </p>
-                    </div>
-
-                    {/* Boutons d'export */}
-                    <div className="space-y-3">
-                      <Button
-                        onClick={() => handleExport('csv')}
-                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
-                        aria-label="Exporter en CSV (compatible Excel)"
-                        style={{
-                          backgroundColor: '#A7F3D0', // Pastel vert menthe
-                          borderColor: '#6EE7B7',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#86EFAC'
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#A7F3D0'
-                          }
-                        }}
-                      >
-                        <Download className="w-4 h-4" />
-                        Exporter en CSV
-                        <span className="text-xs opacity-75">(Excel compatible)</span>
-                      </Button>
-
-                      <Button
-                        onClick={() => handleExport('excel')}
-                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
-                        aria-label="Exporter en Excel (XLSX)"
-                        style={{
-                          backgroundColor: '#BFDBFE', // Pastel bleu
-                          borderColor: '#93C5FD',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#93C5FD'
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#BFDBFE'
-                          }
-                        }}
-                      >
-                        <Download className="w-4 h-4" />
-                        Exporter en Excel (XLSX)
-                      </Button>
-
-                      <Button
-                        onClick={() => handleExport('json')}
-                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
-                        aria-label="Exporter en JSON (pour développeurs)"
-                        style={{
-                          backgroundColor: '#E9D5FF', // Pastel violet lavande
-                          borderColor: '#D8B4FE',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#D8B4FE'
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#E9D5FF'
-                          }
-                        }}
-                      >
-                        <Download className="w-4 h-4" />
-                        Exporter en JSON
-                        <span className="text-xs opacity-75">(Développeurs)</span>
-                      </Button>
-
-                      <Button
-                        onClick={() => handleExport('pdf')}
-                        disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-                        className="w-full flex items-center justify-center gap-2 text-gray-800 font-semibold transition-all"
-                        aria-label="Exporter en PDF (résumé)"
-                        style={{
-                          backgroundColor: '#FBCFE8', // Pastel rose
-                          borderColor: '#F9A8D4',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#F9A8D4'
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!e.currentTarget.disabled) {
-                            e.currentTarget.style.backgroundColor = '#FBCFE8'
-                          }
-                        }}
-                      >
-                        <FileText className="w-4 h-4" />
-                        Exporter en PDF
-                        <span className="text-xs opacity-75">(summary)</span>
-                      </Button>
-                    </div>
-
-                    {isExporting && (
-                      <div className="text-center text-sm text-gray-500 mt-2">
-                        Export en cours...
-                      </div>
+              <TooltipProvider delayDuration={150} skipDelayDuration={0} disableHoverableContent>
+                <div className="flex gap-2 flex-shrink-0">
+                  {/* Menu d'export - Lazy loaded pour performance */}
+                  <Dialog open={showExportDialog} onOpenChange={(open) => {
+                    startTransition(() => {
+                      setShowExportDialog(open)
+                    })
+                  }}>
+                    <Tooltip delayDuration={150}>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isExporting || filteredSubsides.length === 0}
+                              className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
+                              aria-label="Exporter les données filtrées"
+                              onClick={() => {
+                                startTransition(() => {
+                                  setShowExportDialog(true)
+                                })
+                              }}
+                            >
+                              <Download className={`w-4 h-4 ${isExporting ? 'animate-spin' : ''}`} />
+                            </Button>
+                          </DialogTrigger>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p className="leading-relaxed">
+                          {filteredSubsides.length === 0 
+                            ? "Aucune donnée disponible" 
+                            : `${filteredSubsides.length} subside${filteredSubsides.length > 1 ? 's' : ''} • CSV, Excel, JSON, PDF`}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                    {showExportDialog && (
+                      <Suspense fallback={
+                        <div className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 bg-white rounded-lg border shadow-lg fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] z-50">
+                          <div className="animate-pulse space-y-4">
+                            <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+                            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                            <div className="h-32 bg-gray-200 rounded"></div>
+                          </div>
+                        </div>
+                      }>
+                        <ExportDialog
+                          filteredSubsides={filteredSubsides}
+                          selectedColumns={selectedColumns}
+                          onColumnToggle={handleColumnToggle}
+                          onSelectAllColumns={handleSelectAllColumns}
+                          onExport={handleExport}
+                          isExporting={isExporting}
+                        />
+                      </Suspense>
                     )}
-                  </DialogContent>
-                </Dialog>
+                  </Dialog>
 
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                      size="sm"
-                      className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
-                      title="Partager"
-                      aria-label="Partager cette application"
-                  >
-                    <Share2 className="w-4 h-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="w-[95vw] sm:w-full max-w-md p-4 sm:p-6">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <Share2 className="w-5 h-5" />
-                      Partager Subsides Radar
-                    </DialogTitle>
-                    <DialogDescription>
-                      Partagez cette application de transparence des finances publiques
-                    </DialogDescription>
-                  </DialogHeader>
-                  
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Twitter/X */}
-                      <Button
-                        onClick={() => {
-                          const text = "Découvrez la transparence des subsides bruxellois - Données officielles 2019-2024"
-                          const url = new URL(window.location.href)
-                          url.searchParams.set('year', selectedDataYear)
-                          if (searchTerm) url.searchParams.set('search', searchTerm)
-                          const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url.toString())}`
-                          window.open(shareUrl, '_blank')
-                        }}
-                        className="flex items-center justify-center gap-2 bg-black hover:bg-gray-800 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
-                      >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                        </svg>
-                        X (Twitter)
-                      </Button>
-
-                      {/* LinkedIn */}
-                      <Button
-                        onClick={() => {
-                          const url = new URL(window.location.href)
-                          url.searchParams.set('year', selectedDataYear)
-                          if (searchTerm) url.searchParams.set('search', searchTerm)
-                          const fullText = `Découvrez la transparence des subsides bruxellois ${url.toString()}`
-                          window.open(`https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(fullText)}`, '_blank')
-                        }}
-                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
-                      >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                        </svg>
-                        LinkedIn
-                      </Button>
-
-                      {/* Copier le lien */}
-                      <Button
-                        onClick={() => {
-                          const url = new URL(window.location.href)
-                          url.searchParams.set('year', selectedDataYear)
-                          if (searchTerm) url.searchParams.set('search', searchTerm)
-                          
-                          navigator.clipboard.writeText(url.toString()).then(() => {
-                            setShowCopyNotification(true)
-                            setTimeout(() => setShowCopyNotification(false), 2000)
-                          }).catch(() => {
-                            // Fallback
-                            const textArea = document.createElement('textarea')
-                            textArea.value = url.toString()
-                            document.body.appendChild(textArea)
-                            textArea.select()
-                            document.execCommand('copy')
-                            document.body.removeChild(textArea)
-                            setShowCopyNotification(true)
-                            setTimeout(() => setShowCopyNotification(false), 2000)
-                          })
-                        }}
-                        className="flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                        Copier le lien
-                      </Button>
-
-                      {/* WhatsApp */}
-                      <Button
-                        onClick={() => {
-                          const text = "Découvrez la transparence des subsides bruxellois"
-                          const url = new URL(window.location.href)
-                          url.searchParams.set('year', selectedDataYear)
-                          if (searchTerm) url.searchParams.set('search', searchTerm)
-                          window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + url.toString())}`, '_blank')
-                        }}
-                        className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white h-12 sm:h-10 text-sm sm:text-base min-h-[44px]"
-                      >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
-                        </svg>
-                        WhatsApp
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-              </div>
+                  {/* Menu de partage - Lazy loaded pour performance */}
+                  <Dialog open={showShareDialog} onOpenChange={(open) => {
+                    startTransition(() => {
+                      setShowShareDialog(open)
+                    })
+                  }}>
+                    <Tooltip delayDuration={150}>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-10 sm:h-9 px-3 text-sm border-gray-300 hover:bg-gray-50 rounded-md min-h-[44px] sm:min-h-0"
+                              aria-label="Partager cette application"
+                              onClick={() => {
+                                startTransition(() => {
+                                  setShowShareDialog(true)
+                                })
+                              }}
+                            >
+                              <Share2 className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" sideOffset={5}>
+                        <p className="leading-relaxed">Partager cette vue • Twitter, LinkedIn, WhatsApp, lien</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    {showShareDialog && (
+                      <Suspense fallback={
+                        <div className="w-[95vw] sm:w-full max-w-md p-4 sm:p-6 bg-white rounded-lg border shadow-lg fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] z-50">
+                          <div className="animate-pulse space-y-4">
+                            <div className="h-6 bg-gray-200 rounded w-1/2"></div>
+                            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="h-12 bg-gray-200 rounded"></div>
+                              <div className="h-12 bg-gray-200 rounded"></div>
+                            </div>
+                          </div>
+                        </div>
+                      }>
+                        <ShareDialog
+                          selectedDataYear={selectedDataYear}
+                          searchTerm={searchTerm}
+                          onCopyLink={handleCopyLink}
+                        />
+                      </Suspense>
+                    )}
+                  </Dialog>
+                </div>
+              </TooltipProvider>
             </div>
-                </CardContent>
-              </Card>
+          </CardContent>
+        </Card>
 
         {/* Liste des subsides - Design compact avec dégradés */}
         <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl">
@@ -1054,21 +959,37 @@ export default function SubsidesDashboard() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
               <div className="flex-1 min-w-0">
                 <CardTitle 
-                  className="text-1xl sm:text-2xl md:text-3xl font-light bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent" 
+                  className="text-1xl sm:text-2xl md:text-3xl font-light bg-gradient-to-r from-gray-700 to-gray-500 bg-clip-text text-transparent"
                   style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif', letterSpacing: '-0.03em', fontWeight: 300 }}
                 >
-                  Liste des subsides ({filteredSubsides.length})
+                  Liste des subsides
                 </CardTitle>
+                {/* Afficher les totaux : filtrés si recherche active, sinon total global */}
+                {searchTerm ? (
+                  // Totaux filtrés quand il y a une recherche
+                  filteredTotalSubsides > 0 && (
+                    <p className="text-sm sm:text-base text-gray-600 mt-1">
+                      {formatNumberWithSpaces(filteredTotalSubsides)} subside{filteredTotalSubsides > 1 ? 's' : ''} • {formatNumberWithSpaces(Math.round(filteredTotalMontant))} €
+                    </p>
+                  )
+                ) : (
+                  // Total global quand pas de recherche
+                  <p className="text-sm sm:text-base text-gray-600 mt-1">
+                    {formatNumberWithSpaces(TOTAL_SUBSIDES)} subside{TOTAL_SUBSIDES > 1 ? 's' : ''} • {formatNumberWithSpaces(TOTAL_MONTANT)} €
+                  </p>
+                )}
                 <CardDescription className="text-xs text-gray-700 hidden sm:block">Cliquez pour les détails</CardDescription>
               </div>
               {/* Mini-graphique d'évolution */}
               {evolutionData.length > 1 && (
                 <div className="flex items-center justify-end sm:justify-start flex-shrink-0">
-                  <MiniEvolutionChart 
-                    data={evolutionData}
-                    height={50}
-                    className="w-[200px] sm:w-[400px]"
-                  />
+                  <Suspense fallback={<div className="h-12 bg-gray-100 animate-pulse rounded w-[200px] sm:w-[400px]" />}>
+                    <MiniEvolutionChart 
+                      data={evolutionData}
+                      height={50}
+                      className="w-[200px] sm:w-[400px]"
+                    />
+                  </Suspense>
                 </div>
               )}
             </div>
