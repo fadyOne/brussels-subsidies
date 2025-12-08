@@ -337,3 +337,5 @@ Déplacer les calculs lourds dans des Web Workers et utiliser une memoization ag
 - **Cumulative Layout Shift (CLS):** < 0.1
 - **Largest Contentful Paint (LCP):** < 2.5s
 
+
+

@@ -201,3 +201,5 @@ Utiliser `useTransition` de React pour marquer la navigation comme "pending" et 
 3. Mesurer l'amélioration (devrait être instantanée)
 4. Documenter le changement
 
+
+

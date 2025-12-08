@@ -317,3 +317,5 @@ Utiliser `window.history.pushState()` pour mettre à jour l'URL sans recharger l
 - [ ] Partage de vues spécifiques fonctionne
 - [ ] Navigation navigateur (retour/avant) fonctionne
 
+
+

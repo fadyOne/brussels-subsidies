@@ -36,10 +36,20 @@ import { getCachedData, setCachedData, getCachedComputation, setCachedComputatio
 import { categorizeSubside } from '@/lib/category-config'
 import { loadFilterPreset, generateHash, normalizeForHash } from '@/lib/filter-presets'
 import { devLog, devWarn, devError, formatNumberWithSpaces } from '@/lib/utils'
-// ⚠️ DÉSACTIVÉ TEMPORAIREMENT : detectRelationships sera calculé hors ligne
-// Les relations seront pré-calculées dans les JSON lors de l'ajout de données
-// const loadDetectRelationships = () => import('@/lib/organization-relationships').then(m => m.detectRelationships)
-import type { OrganizationRelationship } from '@/lib/organization-relationships'
+// ⚠️ DÉSACTIVÉ : detectRelationships supprimé - Les relations seront pré-calculées dans les JSON lors de l'ajout de données
+// Type local simple pour le state (jamais utilisé car calcul désactivé, mais nécessaire pour le JSX)
+type OrganizationRelationship = {
+  sourceOrg: string
+  targetOrg: string
+  confidence: number
+  mentionCount: number
+  years: string[]
+  contexts: Array<{
+    objet: string
+    annee: string
+    montant: number
+  }>
+}
 
 // Totaux fixes calculés une seule fois (calculés depuis les fichiers JSON)
 // Ces valeurs sont utilisées pour afficher le total global quand il n'y a pas de recherche

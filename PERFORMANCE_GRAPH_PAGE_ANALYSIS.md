@@ -107,3 +107,5 @@ Cette approche hybride offre le meilleur compromis : réactivité immédiate gr�
 - **Time to Interactive (TTI)** : < 3s
 - **Score Lighthouse Performance** : > 90
 
+
+
