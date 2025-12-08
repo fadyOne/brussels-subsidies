@@ -149,3 +149,5 @@ La page Aide est maintenant **complètement statique** et s'affiche **instantan�
 
 Plus aucun chargement de données inutile, plus de calculs bloquants. La navigation vers Aide devrait maintenant être **fluide et immédiate** ! 🚀
 
+
+

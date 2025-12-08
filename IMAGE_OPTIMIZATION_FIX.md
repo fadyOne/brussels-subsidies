@@ -84,3 +84,5 @@ Si l'image bloque toujours, on peut la retirer complètement :
 
 Mais pour l'instant, le lazy loading devrait suffire ! 🎉
 
+
+

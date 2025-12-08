@@ -209,3 +209,5 @@ const [loading, setLoading] = useState(() => {
    - Initialiser `subsides` et `loading` depuis cache
    - Utiliser `useDeferredValue` pour calculs lourds
 
+
+

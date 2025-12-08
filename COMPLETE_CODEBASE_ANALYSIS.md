@@ -230,3 +230,5 @@ Le problème n'est **PAS** les données, mais les **imports lourds synchrones** 
 
 **Solution:** Lazy loader TOUT ce qui n'est pas critique pour le premier render.
 
+
+

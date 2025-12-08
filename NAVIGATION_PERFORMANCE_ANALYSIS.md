@@ -131,3 +131,5 @@ Les composants Recharts (`BarChart`, `LineChart`, etc.) sont utilisés directeme
 
 **URGENT** - Ce problème bloque la navigation sur toutes les pages car Recharts est chargé même si l'utilisateur ne va jamais sur la page Analyse.
 
+
+

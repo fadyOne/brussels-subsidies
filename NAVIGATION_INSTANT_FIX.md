@@ -104,3 +104,5 @@ La page s'affiche immédiatement, et les données se chargent en arrière-plan s
 
 En mode développement avec Turbopack, Next.js peut être plus lent qu'en production. Mais avec ce fix, la navigation devrait être beaucoup plus rapide car on ne bloque plus sur le chargement des données.
 
+
+
