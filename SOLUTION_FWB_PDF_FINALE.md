@@ -64,3 +64,4 @@ Quand la page FWB est mise à jour :
 - Les URLs pointent vers `creationartistique.cfwb.be` (site officiel FWB)
 - Toutes les URLs ont été testées et sont valides
 - Le mapping peut être régénéré à tout moment si nécessaire
+

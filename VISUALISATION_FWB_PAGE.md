@@ -288,3 +288,4 @@ Un lien dans la section "Source" ou "À propos" qui pointe vers la page FWB.
 - ✅ Accès direct : lien vers les subsides en un clic
 - ✅ Pas de confusion : seules les associations avec subsides ont un lien
 - ✅ Navigation fluide : retour vers la recherche avec résultats pré-filtrés
+

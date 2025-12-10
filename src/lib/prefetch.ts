@@ -32,3 +32,4 @@ export function cancelAllPrefetches(): void {
   // No-op: No active prefetch operations to cancel
   // Next.js handles prefetch cancellation automatically
 }
+

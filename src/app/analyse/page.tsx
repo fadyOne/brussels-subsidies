@@ -379,16 +379,50 @@ export default function AnalysePage() {
     )
     .sort((a, b) => Number.parseInt(a.name) - Number.parseInt(b.name))
 
-  const uniqueCategories = [...new Set(subsides.map((s) => categorizeSubside(s.l_objet_de_la_subvention_doel_van_de_subsidie)))]
-
   // Différer les calculs lourds pour permettre au rendu initial de se faire rapidement
   // Cela permet à la page de s'afficher immédiatement même si les calculs prennent du temps
   const deferredSubsides = useDeferredValue(subsides)
   
-  // Cache de regroupement des bénéficiaires (calculé une seule fois)
-  const beneficiaryTypeCache = useMemo(() => {
-    return createBeneficiaryTypeCache(deferredSubsides)
+  // OPTIMISATION: Calculer groupBeneficiaries une seule fois et réutiliser
+  // C'est l'opération la plus coûteuse (normalisations multiples)
+  const beneficiaryGroups = useMemo(() => {
+    if (deferredSubsides.length === 0) return new Map()
+    return groupBeneficiaries(deferredSubsides)
   }, [deferredSubsides])
+  
+  // OPTIMISATION: Cache des catégories (évite de recalculer categorizeSubside pour chaque subside)
+  const categoryCache = useMemo(() => {
+    const cache = new Map<string, string>()
+    deferredSubsides.forEach((subside) => {
+      const key = subside.l_objet_de_la_subvention_doel_van_de_subsidie
+      if (!cache.has(key)) {
+        cache.set(key, categorizeSubside(key))
+      }
+    })
+    return cache
+  }, [deferredSubsides])
+  
+  // Cache de regroupement des bénéficiaires (utilise le groupe déjà calculé)
+  const beneficiaryTypeCache = useMemo(() => {
+    if (beneficiaryGroups.size === 0) return new Map<string, string>()
+    const cache = new Map<string, string>()
+    beneficiaryGroups.forEach((group) => {
+      group.originalNames.forEach((originalName: string) => {
+        cache.set(originalName, group.displayName)
+      })
+    })
+    return cache
+  }, [beneficiaryGroups])
+  
+  // OPTIMISATION: Utiliser le cache de catégories au lieu de recalculer
+  const uniqueCategories = useMemo(() => {
+    const categories = new Set<string>()
+    subsides.forEach((s) => {
+      const category = categoryCache.get(s.l_objet_de_la_subvention_doel_van_de_subsidie) || categorizeSubside(s.l_objet_de_la_subvention_doel_van_de_subsidie)
+      categories.add(category)
+    })
+    return Array.from(categories)
+  }, [subsides, categoryCache])
 
   // Top Bénéficiaires Globaux (toutes catégories confondues)
   // Utilise le regroupement dynamique (normalisation + BCE) pour éviter la fragmentation
@@ -423,9 +457,7 @@ export default function AnalysePage() {
       }))
     }
     
-    // Étape 1 : Regrouper les bénéficiaires de manière dynamique
-    const beneficiaryGroups = groupBeneficiaries(deferredSubsides)
-    
+    // Étape 1 : Utiliser le groupe déjà calculé (optimisation)
     // Étape 2 : Agréger par groupe avec les catégories
     const beneficiaryMap = new Map<string, { name: string; totalAmount: number; count: number; categories: Map<string, number>; originalNames: Set<string> }>()
     
@@ -448,7 +480,7 @@ export default function AnalysePage() {
         displayName = subside.beneficiaire_begunstigde
       }
       
-      const category = categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
+      const category = categoryCache.get(subside.l_objet_de_la_subvention_doel_van_de_subsidie) || categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
       const amount = subside.montant_octroye_toegekend_bedrag
       
       const existing = beneficiaryMap.get(groupKey) || {
@@ -509,7 +541,7 @@ export default function AnalysePage() {
     setCachedComputation(cacheKey, serializableResult, deferredSubsides)
     
     return finalResult
-  }, [deferredSubsides, topBeneficiariesCount, selectedDataYear])
+  }, [deferredSubsides, topBeneficiariesCount, selectedDataYear, beneficiaryGroups, categoryCache])
 
   // Préparer les données pour le graphique : Top 10 + "Autres" pour améliorer la lisibilité
   const chartData = useMemo(() => {
@@ -546,7 +578,7 @@ export default function AnalysePage() {
     const categoryMap = new Map<string, Map<string, { name: string; totalAmount: number; count: number; originalNames: Set<string> }>>()
     
     subsides.forEach((subside) => {
-      const category = categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
+      const category = categoryCache.get(subside.l_objet_de_la_subvention_doel_van_de_subsidie) || categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
       const beneficiaryType = getBeneficiaryType(subside.beneficiaire_begunstigde, beneficiaryTypeCache)
       const amount = subside.montant_octroye_toegekend_bedrag
       
@@ -635,7 +667,7 @@ export default function AnalysePage() {
       existing.totalPrevu += subside.montant_prevu_au_budget_2023_bedrag_voorzien_op_begroting_2023
       existing.count += 1
 
-      const category = categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
+      const category = categoryCache.get(subside.l_objet_de_la_subvention_doel_van_de_subsidie) || categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
       if (category) {
         const current = existing.categories.get(category) || 0
         existing.categories.set(category, current + subside.montant_octroye_toegekend_bedrag)
@@ -713,7 +745,7 @@ export default function AnalysePage() {
 
     subsides.forEach((subside) => {
       const year = subside.l_annee_de_debut_d_octroi_de_la_subvention_beginjaar_waarin_de_subsidie_wordt_toegekend
-      const category = categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
+      const category = categoryCache.get(subside.l_objet_de_la_subvention_doel_van_de_subsidie) || categorizeSubside(subside.l_objet_de_la_subvention_doel_van_de_subsidie)
       
       if (!year || year === 'Non spécifié' || !category) return
 

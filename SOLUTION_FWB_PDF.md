@@ -116,3 +116,4 @@ Après génération du mapping, vous verrez :
 2. **Transparence** : Lien direct vers le document officiel
 3. **Fallback sûr** : Si le PDF n'existe pas, on tombe sur la page de liste
 4. **Maintenance simple** : Script réutilisable pour régénérer le mapping
+

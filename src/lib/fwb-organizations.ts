@@ -123,7 +123,13 @@ export const FWB_PAGE_URL = "https://creationartistique.cfwb.be/contrats-et-cp-m
 
 // Cache pour les noms normalisés FWB (calculé une seule fois)
 let normalizedFwbNamesCache: Set<string> | null = null
-let normalizedFwbNamesPartialCache: Set<string> | null = null
+
+// Mots trop génériques pour déclencher un matching partiel (évite les faux positifs)
+const GENERIC_PARTIAL_WORDS = new Set([
+  'centre', 'center', 'culture', 'musique', 'music',
+  'festival', 'diffusion', 'creation', 'service', 'projet',
+  'production', 'art', 'arts', 'artistique', 'communaute'
+])
 
 /**
  * Initialise le cache des noms normalisés FWB (appelé une seule fois)
@@ -132,22 +138,11 @@ function initializeFwbCache(): void {
   if (normalizedFwbNamesCache !== null) return // Déjà initialisé
   
   normalizedFwbNamesCache = new Set<string>()
-  normalizedFwbNamesPartialCache = new Set<string>()
-  
-  // TypeScript sait maintenant que partialCache n'est pas null
-  const partialCache = normalizedFwbNamesPartialCache
   
   for (const org of FWB_ORGANIZATIONS) {
     const normalizedOrgName = normalizeBeneficiaryName(org.name)
     if (normalizedOrgName) {
       normalizedFwbNamesCache.add(normalizedOrgName)
-      // Ajouter aussi les mots-clés significatifs (longueur > 3) pour matching partiel
-      if (normalizedOrgName.length > 3) {
-        partialCache.add(normalizedOrgName)
-        // Ajouter aussi les mots individuels significatifs
-        const words = normalizedOrgName.split(/\s+/).filter(w => w.length > 3)
-        words.forEach(word => partialCache.add(word))
-      }
     }
   }
 }
@@ -166,8 +161,7 @@ export function isFWBOrganization(beneficiaryName: string): boolean {
   
   // Vérifier que le cache est bien initialisé et utiliser des variables locales
   const cache = normalizedFwbNamesCache
-  const partialCache = normalizedFwbNamesPartialCache
-  if (!cache || !partialCache) {
+  if (!cache) {
     return false
   }
   
@@ -179,14 +173,31 @@ export function isFWBOrganization(beneficiaryName: string): boolean {
     return true
   }
   
-  // Matching partiel (vérifier si un mot-clé significatif est présent)
+  // Matching partiel renforcé : au moins 2 mots significatifs en commun
   if (normalizedBeneficiary.length > 3) {
-    const beneficiaryWords = normalizedBeneficiary.split(/\s+/).filter(w => w.length > 3)
-    for (const word of beneficiaryWords) {
-      if (partialCache.has(word)) {
-        // Vérifier si c'est vraiment une correspondance (pas juste un mot commun)
-        for (const orgName of cache) {
-          if (orgName.includes(word) || normalizedBeneficiary.includes(orgName)) {
+    const beneficiaryWords = normalizedBeneficiary
+      .split(/\s+/)
+      .filter(w => w.length > 3 && !GENERIC_PARTIAL_WORDS.has(w))
+
+    if (beneficiaryWords.length === 0) {
+      return false
+    }
+
+    for (const orgName of cache) {
+      const orgWords = orgName
+        .split(/\s+/)
+        .filter(w => w.length > 3 && !GENERIC_PARTIAL_WORDS.has(w))
+
+      if (orgWords.length === 0) {
+        continue
+      }
+
+      let matchCount = 0
+      const orgWordSet = new Set(orgWords)
+      for (const word of beneficiaryWords) {
+        if (orgWordSet.has(word)) {
+          matchCount += 1
+          if (matchCount >= 2) {
             return true
           }
         }
@@ -343,3 +354,4 @@ export function getFWBUrlSync(beneficiaryName: string): string {
   // Le composant utilisera alors getFWBUrl() en async
   return ''
 }
+

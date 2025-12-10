@@ -135,3 +135,4 @@ Créer une page `/fwb-musiques-actuelles` qui liste toutes les organisations ave
 - Le badge est très petit pour ne pas encombrer les cartes
 - Le bouton FWB utilise le même style que les autres boutons de liens externes pour la cohérence
 - L'URL FWB peut être améliorée plus tard pour pointer vers un PDF spécifique ou une section de la page
+
