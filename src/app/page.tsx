@@ -36,6 +36,7 @@ import { getCachedData, setCachedData, getCachedComputation, setCachedComputatio
 import { categorizeSubside } from '@/lib/category-config'
 import { loadFilterPreset, generateHash, normalizeForHash } from '@/lib/filter-presets'
 import { devLog, devWarn, devError, formatNumberWithSpaces } from '@/lib/utils'
+import { isFWBOrganization, getFWBUrl, getFWBUrlSync, preloadFwbPdfMapping, FWB_PAGE_URL } from '@/lib/fwb-organizations'
 // ⚠️ DÉSACTIVÉ : detectRelationships supprimé - Les relations seront pré-calculées dans les JSON lors de l'ajout de données
 // Type local simple pour le state (jamais utilisé car calcul désactivé, mais nécessaire pour le JSX)
 type OrganizationRelationship = {
@@ -244,9 +245,10 @@ export default function SubsidesDashboard() {
 
 
   // Détecter les années disponibles au chargement initial
+  // OPTIMISATION: Différer getAvailableYears() pour ne pas bloquer la navigation
   useEffect(() => {
     const detectYears = async () => {
-      // Charger les paramètres URL en premier
+      // Charger les paramètres URL en premier (synchrone, rapide)
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search)
         
@@ -323,9 +325,13 @@ export default function SubsidesDashboard() {
         }
       }
       
-      const detectedYears = await getAvailableYears()
-      setAvailableDataYears(detectedYears)
-      devLog("📅 Années détectées:", detectedYears)
+      // OPTIMISATION: Différer getAvailableYears() pour ne pas bloquer la navigation
+      // Utiliser startTransition pour rendre cette opération non-bloquante
+      startTransition(async () => {
+        const detectedYears = await getAvailableYears()
+        setAvailableDataYears(detectedYears)
+        devLog("📅 Années détectées:", detectedYears)
+      })
     }
     detectYears()
   }, [getAvailableYears, presetLoaded])
@@ -542,6 +548,11 @@ export default function SubsidesDashboard() {
     }
   }, [selectedDataYear, getAvailableYears])
 
+  // Précharger le mapping PDF FWB au chargement de la page (pour accès instantané)
+  useEffect(() => {
+    preloadFwbPdfMapping()
+  }, [])
+
   // Charger les données en arrière-plan (non-bloquant pour la navigation)
   useEffect(() => {
     // Utiliser startTransition pour ne pas bloquer la navigation
@@ -733,7 +744,7 @@ export default function SubsidesDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8 animate-in fade-in duration-200">
       {/* Notification discrète pour la copie */}
       {showCopyNotification && (
         <div 
@@ -1025,7 +1036,7 @@ export default function SubsidesDashboard() {
                   <DialogTrigger asChild>
                     <div className={`border-2 rounded-lg p-2.5 sm:p-3 hover:shadow-lg cursor-pointer transition-all bg-white/90 backdrop-blur-sm ${colorScheme.border} ${colorScheme.hoverBorder} ${colorScheme.hoverBg}`}>
                       
-                      {/* Nom du bénéficiaire avec badge de relation */}
+                      {/* Nom du bénéficiaire avec badge de relation et FWB */}
                       <div className="flex items-start gap-1.5 mb-1.5 sm:mb-2">
                         <h3 
                           className="font-semibold text-xs sm:text-sm text-blue-900 line-clamp-1 flex-1"
@@ -1033,14 +1044,24 @@ export default function SubsidesDashboard() {
                         >
                           {subside.beneficiaire_begunstigde}
                         </h3>
-                        {organizationRelationships.has(subside.beneficiaire_begunstigde) && (
-                          <div 
-                            className="flex-shrink-0 mt-0.5"
-                            title={`Relation détectée avec ${organizationRelationships.get(subside.beneficiaire_begunstigde)!.map(r => r.targetOrg).join(', ')}`}
-                          >
-                            <Link2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 hover:text-blue-700" />
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isFWBOrganization(subside.beneficiaire_begunstigde) && (
+                            <Badge 
+                              className="bg-gradient-to-r from-sky-600 to-sky-700 text-white border-0 text-[8px] sm:text-[9px] px-1 sm:px-1.5 py-0 font-bold"
+                              title="Organisation FWB - Musiques actuelles"
+                            >
+                              FWB
+                            </Badge>
+                          )}
+                          {organizationRelationships.has(subside.beneficiaire_begunstigde) && (
+                            <div 
+                              className="flex-shrink-0 mt-0.5"
+                              title={`Relation détectée avec ${organizationRelationships.get(subside.beneficiaire_begunstigde)!.map(r => r.targetOrg).join(', ')}`}
+                            >
+                              <Link2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 hover:text-blue-700" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                       
                       {/* Montant - Plus discret, sans Badge */}
@@ -1155,6 +1176,28 @@ export default function SubsidesDashboard() {
                           <FileText className="w-3.5 h-3.5" />
                           <span>Source</span>
                         </Button>
+                        {isFWBOrganization(subside.beneficiaire_begunstigde) && (
+                          <Button
+                            onClick={() => {
+                              // Essayer d'abord la version synchrone (instantané si cache chargé)
+                              const fwbUrl = getFWBUrlSync(subside.beneficiaire_begunstigde)
+                              
+                              // Si on a une URL valide (pas vide et pas la page de liste), ouvrir immédiatement
+                              if (fwbUrl && fwbUrl !== FWB_PAGE_URL) {
+                                window.open(fwbUrl, '_blank')
+                              } else {
+                                // Fallback async si le mapping n'est pas encore chargé
+                                getFWBUrl(subside.beneficiaire_begunstigde).then(url => {
+                                  window.open(url, '_blank')
+                                })
+                              }
+                            }}
+                            className="flex items-center justify-center bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white border-0 shadow-sm hover:shadow transition-all duration-200 rounded-md px-2 sm:px-2.5 py-1.5 sm:py-1.5 h-auto text-xs sm:text-xs font-medium font-semibold"
+                            aria-label={`Voir l'accord de subside FWB pour ${subside.beneficiaire_begunstigde} dans un nouvel onglet`}
+                          >
+                            <span>FWB</span>
+                          </Button>
+                        )}
                       </div>
                     </div>
 
