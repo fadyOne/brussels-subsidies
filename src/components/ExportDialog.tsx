@@ -1,16 +1,17 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Download, FileText } from "lucide-react"
-import type { ExportColumn } from "@/lib/data-exporter"
-import { DEFAULT_COLUMNS, COLUMN_LABELS } from "@/lib/data-exporter"
+import { Download } from "lucide-react"
 import type { Subside } from "@/lib/types"
+import type { ExportColumn } from "@/lib/data-exporter"
 
 interface ExportDialogProps {
   filteredSubsides: Subside[]
@@ -29,170 +30,104 @@ export function ExportDialog({
   onExport,
   isExporting,
 }: ExportDialogProps) {
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'excel' | 'json' | 'pdf'>('csv')
+
+  const allColumns: ExportColumn[] = [
+    'nom_subvention',
+    'article_complet',
+    'beneficiaire',
+    'numero_bce',
+    'objet',
+    'montant_prevu',
+    'montant_octroye',
+    'annee_debut',
+    'annee_fin',
+    'source_url_open_data',
+    'source_url_north_data',
+    'source_url_kbo',
+  ]
+
+  const columnLabels: Record<ExportColumn, string> = {
+    nom_subvention: 'Nom de la subvention',
+    article_complet: 'Article complet',
+    beneficiaire: 'Bénéficiaire',
+    numero_bce: 'Numéro BCE',
+    objet: 'Objet de la subvention',
+    montant_prevu: 'Montant prévu au budget',
+    montant_octroye: 'Montant octroyé',
+    annee_debut: 'Année de début',
+    annee_fin: 'Année de fin',
+    source_url_open_data: 'Source',
+    source_url_north_data: 'North Data',
+    source_url_kbo: 'Registre KBO',
+  }
+
   return (
-    <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+    <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Download className="w-5 h-5" />
-          Exporter les données
-        </DialogTitle>
+        <DialogTitle>Exporter les données</DialogTitle>
         <DialogDescription>
-          Choisissez les colonnes à exporter et le format de fichier
+          {filteredSubsides.length} subside{filteredSubsides.length > 1 ? 's' : ''} à exporter
         </DialogDescription>
       </DialogHeader>
-      
-      {/* Info sur la sélection des subsides */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-        <p className="text-sm font-medium text-green-900">
-          {filteredSubsides.length} subside{filteredSubsides.length > 1 ? 's' : ''} {filteredSubsides.length > 1 ? 'seront' : 'sera'} exporté{filteredSubsides.length > 1 ? 's' : ''}
-        </p>
-      </div>
-      
-      {/* Sélection de colonnes */}
-      <div className="space-y-3 border-t border-b py-4">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-gray-700">Colonnes à exporter</h4>
+
+      <div className="space-y-6 py-4">
+        {/* Format selection */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Format</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {(['csv', 'excel', 'json', 'pdf'] as const).map((format) => (
+              <Button
+                key={format}
+                variant={selectedFormat === format ? 'default' : 'outline'}
+                onClick={() => setSelectedFormat(format)}
+                className="capitalize"
+              >
+                {format}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Column selection */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Colonnes à exporter</h3>
+            <Button variant="ghost" size="sm" onClick={onSelectAllColumns}>
+              {selectedColumns.length === allColumns.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+            </Button>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-2">
+            {allColumns.map((column) => (
+              <div key={column} className="flex items-center space-x-2">
+                <Checkbox
+                  id={column}
+                  checked={selectedColumns.includes(column)}
+                  onChange={() => onColumnToggle(column)}
+                />
+                <label
+                  htmlFor={column}
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  {columnLabels[column]}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Export button */}
+        <div className="flex justify-end gap-2 pt-4 border-t">
           <Button
-            variant="outline"
-            size="sm"
-            onClick={onSelectAllColumns}
-            className="text-xs sm:text-sm h-9 sm:h-8 px-3 sm:px-2 min-h-[44px] sm:min-h-0"
+            onClick={() => onExport(selectedFormat)}
+            disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
+            className="flex items-center gap-2"
           >
-            {selectedColumns.length === DEFAULT_COLUMNS.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+            <Download className="w-4 h-4" />
+            {isExporting ? 'Export en cours...' : `Exporter en ${selectedFormat.toUpperCase()}`}
           </Button>
         </div>
-        <div className="space-y-0.5 max-h-[300px] overflow-y-auto pr-2">
-          {DEFAULT_COLUMNS.map((column) => (
-            <label
-              key={column}
-              className="flex items-center gap-3 p-1.5 rounded-md hover:bg-gray-50 cursor-pointer transition-colors group"
-            >
-              <input
-                type="checkbox"
-                checked={selectedColumns.includes(column)}
-                onChange={() => onColumnToggle(column)}
-                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 focus:ring-2 transition-colors"
-                aria-label={`Sélectionner la colonne ${COLUMN_LABELS[column]}`}
-              />
-              <span className="text-sm text-gray-700 group-hover:text-gray-900 flex-1">{COLUMN_LABELS[column]}</span>
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-gray-500 mt-2">
-          {selectedColumns.length} colonne{selectedColumns.length > 1 ? 's' : ''} sélectionnée{selectedColumns.length > 1 ? 's' : ''}
-        </p>
       </div>
-
-      {/* Boutons d'export */}
-      <div className="space-y-3">
-        <Button
-          onClick={() => onExport('csv')}
-          disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-          className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
-          aria-label="Exporter en CSV (compatible Excel)"
-          style={{
-            backgroundColor: '#A7F3D0',
-            borderColor: '#6EE7B7',
-          }}
-          onMouseEnter={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#86EFAC'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#A7F3D0'
-            }
-          }}
-        >
-          <Download className="w-4 h-4" />
-          CSV
-          <span className="text-xs opacity-75">(Excel compatible)</span>
-        </Button>
-
-        <Button
-          onClick={() => onExport('excel')}
-          disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-          className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
-          aria-label="Exporter en Excel (XLSX)"
-          style={{
-            backgroundColor: '#BFDBFE',
-            borderColor: '#93C5FD',
-          }}
-          onMouseEnter={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#93C5FD'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#BFDBFE'
-            }
-          }}
-        >
-          <Download className="w-4 h-4" />
-          Excel (XLSX)
-        </Button>
-
-        <Button
-          onClick={() => onExport('json')}
-          disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-          className="w-full flex items-center justify-center gap-2 text-gray-800 font-medium transition-all min-h-[44px] text-sm sm:text-base"
-          aria-label="Exporter en JSON (pour développeurs)"
-          style={{
-            backgroundColor: '#E9D5FF',
-            borderColor: '#D8B4FE',
-          }}
-          onMouseEnter={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#D8B4FE'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#E9D5FF'
-            }
-          }}
-        >
-          <Download className="w-4 h-4" />
-          JSON
-          <span className="text-xs opacity-75">(Développeurs)</span>
-        </Button>
-
-        <Button
-          onClick={() => onExport('pdf')}
-          disabled={isExporting || selectedColumns.length === 0 || filteredSubsides.length === 0}
-          className="w-full flex items-center justify-center gap-2 text-gray-800 font-semibold transition-all"
-          aria-label="Exporter en PDF (résumé)"
-          style={{
-            backgroundColor: '#FBCFE8',
-            borderColor: '#F9A8D4',
-          }}
-          onMouseEnter={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#F9A8D4'
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!e.currentTarget.disabled) {
-              e.currentTarget.style.backgroundColor = '#FBCFE8'
-            }
-          }}
-        >
-          <FileText className="w-4 h-4" />
-          PDF
-          <span className="text-xs opacity-75">(summary)</span>
-        </Button>
-      </div>
-
-      {isExporting && (
-        <div className="text-center text-sm text-gray-500 mt-2">
-          Export en cours...
-        </div>
-      )}
     </DialogContent>
   )
 }
-
-
-

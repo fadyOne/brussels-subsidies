@@ -121,33 +121,80 @@ export const FWB_ORGANIZATIONS: FWBOrganization[] = [
 // URL de la page FWB officielle
 export const FWB_PAGE_URL = "https://creationartistique.cfwb.be/contrats-et-cp-musiques-actuelles"
 
+// Cache pour les noms normalisés FWB (calculé une seule fois)
+let normalizedFwbNamesCache: Set<string> | null = null
+let normalizedFwbNamesPartialCache: Set<string> | null = null
+
+/**
+ * Initialise le cache des noms normalisés FWB (appelé une seule fois)
+ */
+function initializeFwbCache(): void {
+  if (normalizedFwbNamesCache !== null) return // Déjà initialisé
+  
+  normalizedFwbNamesCache = new Set<string>()
+  normalizedFwbNamesPartialCache = new Set<string>()
+  
+  // TypeScript sait maintenant que partialCache n'est pas null
+  const partialCache = normalizedFwbNamesPartialCache
+  
+  for (const org of FWB_ORGANIZATIONS) {
+    const normalizedOrgName = normalizeBeneficiaryName(org.name)
+    if (normalizedOrgName) {
+      normalizedFwbNamesCache.add(normalizedOrgName)
+      // Ajouter aussi les mots-clés significatifs (longueur > 3) pour matching partiel
+      if (normalizedOrgName.length > 3) {
+        partialCache.add(normalizedOrgName)
+        // Ajouter aussi les mots individuels significatifs
+        const words = normalizedOrgName.split(/\s+/).filter(w => w.length > 3)
+        words.forEach(word => partialCache.add(word))
+      }
+    }
+  }
+}
+
 /**
  * Vérifie si un bénéficiaire fait partie de la liste FWB
- * Utilise la normalisation pour gérer les variantes de noms
+ * OPTIMISÉ : Utilise un cache pré-calculé pour éviter les recalculs
  */
 export function isFWBOrganization(beneficiaryName: string): boolean {
   if (!beneficiaryName) return false
   
-  const normalizedBeneficiary = normalizeBeneficiaryName(beneficiaryName)
+  // Initialiser le cache une seule fois
+  if (normalizedFwbNamesCache === null) {
+    initializeFwbCache()
+  }
   
-  return FWB_ORGANIZATIONS.some(org => {
-    const normalizedOrgName = normalizeBeneficiaryName(org.name)
-    
-    // Matching exact après normalisation
-    if (normalizedBeneficiary === normalizedOrgName && normalizedOrgName !== '') {
-      return true
-    }
-    
-    // Matching partiel (si le nom normalisé est contenu dans l'autre ou vice versa)
-    if (normalizedOrgName.length > 3 && normalizedBeneficiary.length > 3) {
-      if (normalizedBeneficiary.includes(normalizedOrgName) || 
-          normalizedOrgName.includes(normalizedBeneficiary)) {
-        return true
+  // Vérifier que le cache est bien initialisé et utiliser des variables locales
+  const cache = normalizedFwbNamesCache
+  const partialCache = normalizedFwbNamesPartialCache
+  if (!cache || !partialCache) {
+    return false
+  }
+  
+  const normalizedBeneficiary = normalizeBeneficiaryName(beneficiaryName)
+  if (!normalizedBeneficiary) return false
+  
+  // Matching exact (O(1) avec Set)
+  if (cache.has(normalizedBeneficiary)) {
+    return true
+  }
+  
+  // Matching partiel (vérifier si un mot-clé significatif est présent)
+  if (normalizedBeneficiary.length > 3) {
+    const beneficiaryWords = normalizedBeneficiary.split(/\s+/).filter(w => w.length > 3)
+    for (const word of beneficiaryWords) {
+      if (partialCache.has(word)) {
+        // Vérifier si c'est vraiment une correspondance (pas juste un mot commun)
+        for (const orgName of cache) {
+          if (orgName.includes(word) || normalizedBeneficiary.includes(orgName)) {
+            return true
+          }
+        }
       }
     }
-    
-    return false
-  })
+  }
+  
+  return false
 }
 
 /**

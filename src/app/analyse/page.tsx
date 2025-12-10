@@ -1133,11 +1133,14 @@ export default function AnalysePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-        <AppHeader
-          selectedYear={selectedDataYear}
-          currentPage="analyse"
-          showNavigation={true}
-        />
+        {/* Container avec hauteur fixe pour éviter les recalculs de layout */}
+        {/* IMPORTANT: Ne pas passer selectedYear pour éviter les recalculs */}
+        <div className="min-h-[180px] sm:min-h-[200px] md:min-h-[220px]">
+          <AppHeader
+            currentPage="analyse"
+            showNavigation={true}
+          />
+        </div>
 
         {/* Sous-onglets pour les graphiques - Style cohérent avec navigation principale */}
         <Tabs defaultValue="comparison" className="space-y-4 sm:space-y-6">
